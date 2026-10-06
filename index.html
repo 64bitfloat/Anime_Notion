@@ -205,8 +205,6 @@
         const card = document.createElement("div");
         card.className = "card";
 
-        const joinVal = (v) => Array.isArray(v) ? v.join(", ") : (v || "");
-
         card.innerHTML = `
           <div class="card-header">
             <h3>${work.title}</h3>
@@ -214,13 +212,13 @@
           </div>
           <div class="form-grid">
             <div class="form-label">登録タイトル:</div>
-            <div><input type="text" id="title-${index}" value="${work.title}"></div>
+            <div><input type="text" id="title-${index}"></div>
 
             <div class="form-label">放送期間:</div>
-            <div><input type="text" id="period-${index}" value="${work.period || ''}" placeholder="例: 2010年4月7日 - 9月29日" oninput="updateSeasonsFromPeriod(${index})"></div>
+            <div><input type="text" id="period-${index}" oninput="updateSeasonsFromPeriod(${index})"></div>
 
             <div class="form-label">放送クール:</div>
-            <div><input type="text" id="seasons-${index}" value="${joinVal(work.seasons)}" placeholder="カンマ区切り（例: 2010 春, 2010 夏）"></div>
+            <div><input type="text" id="seasons-${index}" placeholder="カンマ区切り（例: 2010 春, 2010 夏）"></div>
 
             <div class="form-label">ジャンル:</div>
             <div class="genre-container">
@@ -232,19 +230,19 @@
             </div>
 
             <div class="form-label">制作会社:</div>
-            <div><input type="text" id="studios-${index}" value="${joinVal(work.studios)}"></div>
+            <div><input type="text" id="studios-${index}"></div>
 
             <div class="form-label">原作者:</div>
-            <div><input type="text" id="authors-${index}" value="${joinVal(work.authors)}"></div>
+            <div><input type="text" id="authors-${index}"></div>
 
             <div class="form-label">監督:</div>
-            <div><input type="text" id="directors-${index}" value="${joinVal(work.directors)}"></div>
+            <div><input type="text" id="directors-${index}"></div>
 
             <div class="form-label">キャラデザ:</div>
-            <div><input type="text" id="charaDesigns-${index}" value="${joinVal(work.charaDesigns)}"></div>
+            <div><input type="text" id="charaDesigns-${index}"></div>
 
             <div class="form-label">音楽:</div>
-            <div><input type="text" id="musics-${index}" value="${joinVal(work.musics)}"></div>
+            <div><input type="text" id="musics-${index}"></div>
           </div>
           <div class="action-row">
             <select id="status-${index}">
@@ -259,13 +257,31 @@
           </div>
         `;
         resultsDiv.appendChild(card);
+
+        // 安全な直接代入（HTMLインジェクションやundefined化を完全防止）
+        const joinVal = (v) => Array.isArray(v) ? v.join(", ") : (v || "");
+        document.getElementById(`title-${index}`).value = work.title || "";
+        document.getElementById(`period-${index}`).value = work.period || "";
+        document.getElementById(`seasons-${index}`).value = joinVal(work.seasons);
+        document.getElementById(`studios-${index}`).value = joinVal(work.studios);
+        document.getElementById(`authors-${index}`).value = joinVal(work.authors);
+        document.getElementById(`directors-${index}`).value = joinVal(work.directors);
+        document.getElementById(`charaDesigns-${index}`).value = joinVal(work.charaDesigns);
+        document.getElementById(`musics-${index}`).value = joinVal(work.musics);
+
+        // もしGAS側からperiodが入ってきたのにseasonsが空の場合は即時補完
+        if (work.period && (!work.seasons || work.seasons.length === 0)) {
+          updateSeasonsFromPeriod(index);
+        }
+
         renderGenreTags(index);
       });
     }
 
-    // 放送期間を手動で打ち直した場合にクールをブラウザ上で即座に再計算
     function updateSeasonsFromPeriod(index) {
       const periodStr = document.getElementById(`period-${index}`).value;
+      if (!periodStr) return;
+
       const getQuarterName = (m) => (m <= 3 ? "冬" : m <= 6 ? "春" : m <= 9 ? "夏" : "秋");
       const rangeRegex = /(\d{4})年\s*(\d{1,2})月(?:\s*\d{1,2}日)?\s*(?:-|–|〜|～)\s*(?:(\d{4})年\s*)?(\d{1,2})月/;
       const match = periodStr.match(rangeRegex);
@@ -287,6 +303,12 @@
           if (curM > 12) { curM -= 12; curY += 1; }
         }
         document.getElementById(`seasons-${index}`).value = quarters.join(", ");
+        return;
+      }
+
+      const singleMatch = periodStr.match(/(\d{4})年\s*(\d{1,2})月/);
+      if (singleMatch) {
+        document.getElementById(`seasons-${index}`).value = `${singleMatch[1]} ${getQuarterName(parseInt(singleMatch[2], 10))}`;
       }
     }
 
@@ -365,22 +387,4 @@
           body: JSON.stringify(payload)
         });
 
-        const res = await response.json();
-
-        if (res.status === "success") {
-          msg.textContent = "✔ Notionに登録完了しました！";
-          msg.style.color = "#0a7c42";
-        } else {
-          msg.textContent = `❌ エラー: ${res.message}`;
-          msg.style.color = "red";
-          btn.disabled = false;
-        }
-      } catch (err) {
-        msg.textContent = `❌ 通信エラー: ${err.message}`;
-        msg.style.color = "red";
-        btn.disabled = false;
-      }
-    }
-  </script>
-</body>
-</html>
+        const res = await
