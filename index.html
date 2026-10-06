@@ -3,45 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>アニメ情報 Notion 登録ツール (Wikipedia準拠)</title>
+  <title>アニメ情報 Notion 登録ツール (Wikipedia 照会)</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 850px;
-      margin: 40px auto;
+      max-width: 1200px;
+      margin: 30px auto;
       padding: 0 20px;
       color: #333;
       background-color: #f7f7f5;
     }
     h1 {
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       border-bottom: 2px solid #ddd;
       padding-bottom: 8px;
+      margin-bottom: 20px;
     }
     .search-box {
       display: flex;
       gap: 8px;
       margin-bottom: 24px;
     }
-    input[type="text"] {
-      padding: 8px 12px;
-      font-size: 0.95rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      width: 100%;
-      box-sizing: border-box;
-    }
     .search-box input[type="text"] {
       flex: 1;
-      font-size: 1rem;
       padding: 10px 14px;
-    }
-    select {
-      padding: 8px 12px;
-      font-size: 0.95rem;
+      font-size: 1rem;
       border: 1px solid #ccc;
       border-radius: 6px;
-      background-color: #fff;
     }
     button {
       padding: 10px 20px;
@@ -54,59 +42,104 @@
     }
     button:hover { background-color: #185ea5; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
-    .card {
+
+    /* 2カラム表示 */
+    .compare-container {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 20px;
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
       padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      margin-bottom: 30px;
     }
-    .card-header {
+    @media (max-width: 900px) {
+      .compare-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* 左カラム：Wikipediaそのままの表 */
+    .wiki-view-panel {
+      border-right: 1px solid #eee;
+      padding-right: 20px;
+      max-height: 800px;
+      overflow-y: auto;
+    }
+    @media (max-width: 900px) {
+      .wiki-view-panel {
+        border-right: none;
+        border-bottom: 1px solid #eee;
+        padding-right: 0;
+        padding-bottom: 20px;
+      }
+    }
+    .wiki-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 8px;
     }
-    .card-header h3 { margin: 0; font-size: 1.25rem; }
+    .wiki-header h3 { margin: 0; font-size: 1.1rem; }
     .wiki-link {
       font-size: 0.85rem;
       color: #0b6bcb;
       text-decoration: none;
     }
     .wiki-link:hover { text-decoration: underline; }
-    .form-grid {
+
+    /* 移植されたWikipedia表のスタイル補正 */
+    .wiki-table-wrapper table {
+      width: 100% !important;
+      font-size: 0.82rem !important;
+      border-collapse: collapse !important;
+      border: 1px solid #ccc !important;
+      background-color: #f9f9f9 !important;
+      line-height: 1.4 !important;
+    }
+    .wiki-table-wrapper th, .wiki-table-wrapper td {
+      border: 1px solid #ddd !important;
+      padding: 5px 8px !important;
+    }
+    .wiki-table-wrapper th {
+      background-color: #eaecf0 !important;
+      text-align: left !important;
+      width: 32% !important;
+    }
+
+    /* 右カラム：入力フォーム */
+    .form-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .form-row {
       display: grid;
-      grid-template-columns: 110px 1fr;
-      row-gap: 12px;
+      grid-template-columns: 90px 1fr;
       column-gap: 12px;
       align-items: center;
-      margin-bottom: 16px;
       font-size: 0.9rem;
     }
     .form-label {
       color: #666;
       font-weight: bold;
     }
-    .action-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #eee;
-    }
-    .status-msg {
-      font-weight: bold;
+    .form-row input[type="text"] {
+      padding: 8px 10px;
       font-size: 0.95rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
     }
 
-    .genre-container {
+    /* タグ一覧・追加共通スタイル */
+    .tag-container {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
     .tag-list {
       display: flex;
@@ -131,30 +164,83 @@
       font-weight: bold;
       color: #7b9ebc;
       font-size: 14px;
-      line-height: 1;
     }
-    .tag-close:hover {
-      color: #c92a2a;
-    }
-    .add-tag-box {
+    .tag-close:hover { color: #c92a2a; }
+
+    /* クール選択UI */
+    .season-picker {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
-      max-width: 320px;
     }
-    .add-tag-btn {
+    .season-picker select {
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #fff;
+    }
+    .season-btn-group {
+      display: inline-flex;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .season-btn {
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      background-color: #fff;
+      color: #333;
+      border: none;
+      border-right: 1px solid #ccc;
+      border-radius: 0;
+      cursor: pointer;
+    }
+    .season-btn:last-child { border-right: none; }
+    .season-btn:hover { background-color: #eee; }
+    .season-btn.active {
+      background-color: #0b6bcb;
+      color: #fff;
+    }
+    .add-btn-small {
       padding: 6px 12px;
       font-size: 0.85rem;
       background-color: #555;
-      white-space: nowrap;
     }
-    .add-tag-btn:hover {
-      background-color: #333;
+    .add-btn-small:hover { background-color: #333; }
+
+    /* ジャンル追加UI */
+    .genre-add-box {
+      display: flex;
+      gap: 6px;
+      max-width: 300px;
+    }
+
+    .action-panel {
+      margin-top: 10px;
+      padding-top: 14px;
+      border-top: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    select.status-select {
+      padding: 8px 12px;
+      font-size: 0.95rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
+    }
+    .status-msg {
+      font-weight: bold;
+      font-size: 0.95rem;
     }
   </style>
 </head>
 <body>
 
-  <h1>アニメ情報 Notion 登録 (Wikipedia準拠)</h1>
+  <h1>アニメ情報 Notion 登録 (Wikipedia照会ツール)</h1>
 
   <div class="search-box">
     <input type="text" id="keyword" placeholder="作品名を入力（例: けいおん！、ぼっち・ざ・ろっく！）" onkeydown="if(event.key==='Enter') search();">
@@ -167,6 +253,9 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pc0IOAAQ0R6YDmmBCK7FxgYynrCspRWTxF6dw/exec";
 
     let currentResults = [];
+    let stateSeasons = [];
+    let stateGenres = [];
+    let selectedSeasonQuarter = ""; // "冬", "春", "夏", "秋" または ""
 
     async function search() {
       const keyword = document.getElementById("keyword").value.trim();
@@ -185,206 +274,110 @@
         searchBtn.disabled = false;
 
         if (res.status !== "success" || !res.data || res.data.length === 0) {
-          resultsDiv.innerHTML = "<p>Wikipedia上にアニメの該当記事が見つかりませんでした。</p>";
+          resultsDiv.innerHTML = "<p>Wikipedia上に該当記事が見つかりませんでした。</p>";
           return;
         }
 
         currentResults = res.data;
-        renderResults();
+        renderMainView();
       } catch (err) {
         searchBtn.disabled = false;
         resultsDiv.innerHTML = `<p style="color:red;">通信エラーが発生しました: ${err.message}</p>`;
       }
     }
 
-    function renderResults() {
+    function renderMainView() {
       const resultsDiv = document.getElementById("results");
       resultsDiv.innerHTML = "";
 
-      currentResults.forEach((work, index) => {
-        const card = document.createElement("div");
-        card.className = "card";
+      const item = currentResults[0];
+      const initial = item.initial || {};
 
-        card.innerHTML = `
-          <div class="card-header">
-            <h3>${work.title}</h3>
-            <a href="${work.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">Wikipediaで確認 ↗</a>
+      stateGenres = initial.genres || [];
+      stateSeasons = []; // 初期は空（プルダウンからポチポチ追加）
+
+      // 西暦（2000〜2050）のオプション生成
+      let yearOptions = "";
+      for (let y = 2000; y <= 2050; y++) {
+        const isSelected = (y === 2009) ? "selected" : "";
+        yearOptions += `<option value="${y}" ${isSelected}>${y}年</option>`;
+      }
+
+      const joinStr = (arr) => (arr || []).join(", ");
+
+      const container = document.createElement("div");
+      container.className = "compare-container";
+
+      container.innerHTML = `
+        <!-- 左：Wikipediaの表そのものを移植 -->
+        <div class="wiki-view-panel">
+          <div class="wiki-header">
+            <h3>Wikipedia情報</h3>
+            <a href="${item.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">Wikiを開く ↗</a>
           </div>
-          <div class="form-grid">
-            <div class="form-label">登録タイトル:</div>
-            <div><input type="text" id="title-${index}"></div>
+          <div class="wiki-table-wrapper">
+            ${item.tableHtml}
+          </div>
+        </div>
 
-            <div class="form-label">放送期間:</div>
-            <div><input type="text" id="period-${index}" oninput="updateSeasonsFromPeriod(${index})"></div>
+        <!-- 右：Notion登録フォーム -->
+        <div class="form-panel">
+          <div class="form-row">
+            <div class="form-label">作品名:</div>
+            <div><input type="text" id="reg-title" value="${item.title} (第1期)"></div>
+          </div>
 
+          <div class="form-row">
             <div class="form-label">放送クール:</div>
-            <div><input type="text" id="seasons-${index}" placeholder="カンマ区切り（例: 2010 春, 2010 夏）"></div>
-
-            <div class="form-label">ジャンル:</div>
-            <div class="genre-container">
-              <div class="tag-list" id="tag-list-${index}"></div>
-              <div class="add-tag-box">
-                <input type="text" id="new-genre-${index}" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag(${index});}">
-                <button type="button" class="add-tag-btn" onclick="addGenreTag(${index})">追加</button>
+            <div class="tag-container">
+              <div class="tag-list" id="season-tag-list"></div>
+              
+              <!-- クール選択ピッカー（年 ＋ 春夏秋冬 ＋ 追加） -->
+              <div class="season-picker">
+                <select id="season-year-select">
+                  ${yearOptions}
+                </select>
+                <div class="season-btn-group">
+                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '冬')">冬</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '春')">春</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '夏')">夏</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '秋')">秋</button>
+                </div>
+                <button type="button" class="add-btn-small" onclick="addSeasonTag()">クール追加</button>
               </div>
             </div>
+          </div>
 
+          <div class="form-row">
+            <div class="form-label">ジャンル:</div>
+            <div class="tag-container">
+              <div class="tag-list" id="genre-tag-list"></div>
+              <div class="genre-add-box">
+                <input type="text" id="new-genre-input" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag();}">
+                <button type="button" class="add-btn-small" onclick="addGenreTag()">追加</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
             <div class="form-label">制作会社:</div>
-            <div><input type="text" id="studios-${index}"></div>
+            <div><input type="text" id="reg-studios" value="${joinStr(initial.studios)}"></div>
+          </div>
 
+          <div class="form-row">
             <div class="form-label">原作者:</div>
-            <div><input type="text" id="authors-${index}"></div>
+            <div><input type="text" id="reg-authors" value="${joinStr(initial.authors)}"></div>
+          </div>
 
+          <div class="form-row">
             <div class="form-label">監督:</div>
-            <div><input type="text" id="directors-${index}"></div>
+            <div><input type="text" id="reg-directors" value="${joinStr(initial.directors)}"></div>
+          </div>
 
+          <div class="form-row">
             <div class="form-label">キャラデザ:</div>
-            <div><input type="text" id="charaDesigns-${index}"></div>
-
-            <div class="form-label">音楽:</div>
-            <div><input type="text" id="musics-${index}"></div>
+            <div><input type="text" id="reg-charaDesigns" value="${joinStr(initial.charaDesigns)}"></div>
           </div>
-          <div class="action-row">
-            <select id="status-${index}">
-              <option value="未視聴">未視聴</option>
-              <option value="視聴中">視聴中</option>
-              <option value="視聴済" selected>視聴済</option>
-              <option value="視聴完了">視聴完了</option>
-              <option value="中断">中断</option>
-            </select>
-            <button id="btn-${index}" onclick="registerNotion(${index})">この内容でNotionに登録</button>
-            <span id="msg-${index}" class="status-msg"></span>
-          </div>
-        `;
-        resultsDiv.appendChild(card);
 
-        // 安全な直接代入（HTMLインジェクションやundefined化を完全防止）
-        const joinVal = (v) => Array.isArray(v) ? v.join(", ") : (v || "");
-        document.getElementById(`title-${index}`).value = work.title || "";
-        document.getElementById(`period-${index}`).value = work.period || "";
-        document.getElementById(`seasons-${index}`).value = joinVal(work.seasons);
-        document.getElementById(`studios-${index}`).value = joinVal(work.studios);
-        document.getElementById(`authors-${index}`).value = joinVal(work.authors);
-        document.getElementById(`directors-${index}`).value = joinVal(work.directors);
-        document.getElementById(`charaDesigns-${index}`).value = joinVal(work.charaDesigns);
-        document.getElementById(`musics-${index}`).value = joinVal(work.musics);
-
-        // もしGAS側からperiodが入ってきたのにseasonsが空の場合は即時補完
-        if (work.period && (!work.seasons || work.seasons.length === 0)) {
-          updateSeasonsFromPeriod(index);
-        }
-
-        renderGenreTags(index);
-      });
-    }
-
-    function updateSeasonsFromPeriod(index) {
-      const periodStr = document.getElementById(`period-${index}`).value;
-      if (!periodStr) return;
-
-      const getQuarterName = (m) => (m <= 3 ? "冬" : m <= 6 ? "春" : m <= 9 ? "夏" : "秋");
-      const rangeRegex = /(\d{4})年\s*(\d{1,2})月(?:\s*\d{1,2}日)?\s*(?:-|–|〜|～)\s*(?:(\d{4})年\s*)?(\d{1,2})月/;
-      const match = periodStr.match(rangeRegex);
-
-      if (match) {
-        const startYear = parseInt(match[1], 10);
-        const startMonth = parseInt(match[2], 10);
-        const endYear = match[3] ? parseInt(match[3], 10) : startYear;
-        const endMonth = parseInt(match[4], 10);
-
-        const quarters = [];
-        let curY = startYear;
-        let curM = startMonth;
-
-        while (curY < endYear || (curY === endYear && curM <= endMonth)) {
-          const qName = `${curY} ${getQuarterName(curM)}`;
-          if (!quarters.includes(qName)) quarters.push(qName);
-          curM += 3;
-          if (curM > 12) { curM -= 12; curY += 1; }
-        }
-        document.getElementById(`seasons-${index}`).value = quarters.join(", ");
-        return;
-      }
-
-      const singleMatch = periodStr.match(/(\d{4})年\s*(\d{1,2})月/);
-      if (singleMatch) {
-        document.getElementById(`seasons-${index}`).value = `${singleMatch[1]} ${getQuarterName(parseInt(singleMatch[2], 10))}`;
-      }
-    }
-
-    function renderGenreTags(index) {
-      const tagListDiv = document.getElementById(`tag-list-${index}`);
-      tagListDiv.innerHTML = "";
-      const currentGenres = currentResults[index].genres || [];
-
-      currentGenres.forEach((tag, tIdx) => {
-        const item = document.createElement("span");
-        item.className = "tag-item";
-        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${index}, ${tIdx})">&times;</span>`;
-        tagListDiv.appendChild(item);
-      });
-    }
-
-    function removeGenreTag(cardIdx, tagIdx) {
-      currentResults[cardIdx].genres.splice(tagIdx, 1);
-      renderGenreTags(cardIdx);
-    }
-
-    function addGenreTag(cardIdx) {
-      const input = document.getElementById(`new-genre-${cardIdx}`);
-      const val = input.value.trim();
-      if (!val) return;
-
-      if (!currentResults[cardIdx].genres) {
-        currentResults[cardIdx].genres = [];
-      }
-
-      if (!currentResults[cardIdx].genres.includes(val)) {
-        currentResults[cardIdx].genres.push(val);
-        renderGenreTags(cardIdx);
-      }
-      input.value = "";
-    }
-
-    async function registerNotion(index) {
-      const btn = document.getElementById(`btn-${index}`);
-      const msg = document.getElementById(`msg-${index}`);
-
-      const parseInput = (id) => document.getElementById(id).value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
-
-      const title = document.getElementById(`title-${index}`).value.trim();
-      const seasons = parseInput(`seasons-${index}`);
-      const genres = currentResults[index].genres || [];
-      const studios = parseInput(`studios-${index}`);
-      const authors = parseInput(`authors-${index}`);
-      const directors = parseInput(`directors-${index}`);
-      const charaDesigns = parseInput(`charaDesigns-${index}`);
-      const musics = parseInput(`musics-${index}`);
-      const status = document.getElementById(`status-${index}`).value;
-
-      btn.disabled = true;
-      msg.textContent = "Notionへ登録中（リレーション紐付け中）...";
-      msg.style.color = "#0b6bcb";
-
-      try {
-        const payload = {
-          action: "register",
-          workData: {
-            title: title,
-            status: status,
-            seasons: seasons,
-            genres: genres,
-            studios: studios,
-            authors: authors,
-            directors: directors,
-            charaDesigns: charaDesigns,
-            musics: musics
-          }
-        };
-
-        const response = await fetch(GAS_URL, {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-
-        const res = await
+          <div class="form-row">
+            <div
