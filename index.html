@@ -7,17 +7,17 @@
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 1250px;
-      margin: 25px auto;
+      max-width: 1300px;
+      margin: 20px auto;
       padding: 0 20px;
       color: #333;
       background-color: #f7f7f5;
     }
     h1 {
-      font-size: 1.4rem;
+      font-size: 1.35rem;
       border-bottom: 2px solid #ddd;
       padding-bottom: 8px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     .search-box {
       display: flex;
@@ -43,30 +43,24 @@
     button:hover { background-color: #185ea5; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
 
-    /* 左右2分割レイアウト */
-    .compare-container {
+    .compare-layout {
       display: grid;
-      grid-template-columns: 480px 1fr;
+      grid-template-columns: 460px 1fr;
       gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 950px) {
+      .compare-layout { grid-template-columns: 1fr; }
+    }
+
+    .wiki-sticky-panel {
+      position: sticky;
+      top: 20px;
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      padding: 20px;
+      padding: 16px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-    }
-    @media (max-width: 950px) {
-      .compare-container { grid-template-columns: 1fr; }
-    }
-
-    /* 左カラム：Wikipediaの埋め込み */
-    .wiki-view-panel {
-      display: flex;
-      flex-direction: column;
-      border-right: 1px solid #eee;
-      padding-right: 20px;
-    }
-    @media (max-width: 950px) {
-      .wiki-view-panel { border-right: none; border-bottom: 1px solid #eee; padding-right: 0; padding-bottom: 20px; }
     }
     .wiki-header {
       display: flex;
@@ -74,13 +68,12 @@
       align-items: center;
       margin-bottom: 8px;
     }
-    .wiki-header h3 { margin: 0; font-size: 1.05rem; }
+    .wiki-header h3 { margin: 0; font-size: 1rem; }
     .wiki-link { font-size: 0.85rem; color: #0b6bcb; text-decoration: none; }
     .wiki-link:hover { text-decoration: underline; }
     
     .wiki-iframe-wrapper {
-      flex: 1;
-      height: 680px;
+      height: 700px;
       border: 1px solid #ddd;
       border-radius: 6px;
       overflow: hidden;
@@ -92,12 +85,30 @@
       border: none;
     }
 
-    /* 右カラム：入力フォーム */
-    .form-panel {
+    .forms-column {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .season-card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
+    .card-title-header {
+      font-size: 1.15rem;
+      font-weight: bold;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+      color: #111;
+    }
+
     .form-row {
       display: grid;
       grid-template-columns: 90px 1fr;
@@ -113,6 +124,32 @@
       border-radius: 6px;
       width: 100%;
       box-sizing: border-box;
+    }
+
+    /* タイトル入力エリア用（入力欄＋第1期付与ボタン） */
+    .title-input-box {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .toggle-season1-btn {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      background-color: #f0f4f8;
+      color: #0b6bcb;
+      border: 1px solid #bcd7f5;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .toggle-season1-btn:hover {
+      background-color: #dceaf7;
+    }
+    .toggle-season1-btn.active {
+      background-color: #0b6bcb;
+      color: #fff;
+      border-color: #0b6bcb;
     }
 
     .tag-container { display: flex; flex-direction: column; gap: 6px; }
@@ -131,7 +168,6 @@
     .tag-close { margin-left: 6px; cursor: pointer; font-weight: bold; color: #7b9ebc; font-size: 14px; }
     .tag-close:hover { color: #c92a2a; }
 
-    /* クール選択UI */
     .season-picker {
       display: flex;
       flex-wrap: wrap;
@@ -174,8 +210,8 @@
     .genre-add-box { display: flex; gap: 6px; max-width: 320px; }
 
     .action-panel {
-      margin-top: 10px;
-      padding-top: 14px;
+      margin-top: 8px;
+      padding-top: 12px;
       border-top: 1px solid #eee;
       display: flex;
       align-items: center;
@@ -207,9 +243,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pc0IOAAQ0R6YDmmBCK7FxgYynrCspRWTxF6dw/exec";
 
     let currentResults = [];
-    let stateSeasons = [];
-    let stateGenres = [];
-    let selectedSeasonQuarter = "";
+    let cardStates = [];
 
     async function search() {
       const keyword = document.getElementById("keyword").value.trim();
@@ -233,22 +267,25 @@
         }
 
         currentResults = res.data;
-        renderMainView();
+        renderLayout();
       } catch (err) {
         searchBtn.disabled = false;
         resultsDiv.innerHTML = `<p style="color:red;">通信エラーが発生しました: ${err.message}</p>`;
       }
     }
 
-    function renderMainView() {
+    function renderLayout() {
       const resultsDiv = document.getElementById("results");
       resultsDiv.innerHTML = "";
 
-      const item = currentResults[0];
-      const initial = item.initial || {};
+      const firstItem = currentResults[0];
 
-      stateGenres = initial.genres || [];
-      stateSeasons = [];
+      cardStates = currentResults.map(item => ({
+        seasons: [],
+        genres: [...(item.genres || [])],
+        selectedQuarter: "",
+        hasSeason1Tag: false
+      }));
 
       let yearOptions = "";
       for (let y = 2000; y <= 2050; y++) {
@@ -258,44 +295,62 @@
 
       const joinStr = (arr) => (arr || []).join(", ");
 
-      const container = document.createElement("div");
-      container.className = "compare-container";
+      const layout = document.createElement("div");
+      layout.className = "compare-layout";
 
-      container.innerHTML = `
-        <!-- 左：Wikipediaの埋め込み（インフォボックスが即座に確認可能） -->
-        <div class="wiki-view-panel">
-          <div class="wiki-header">
-            <h3>Wikipedia 参照</h3>
-            <a href="${item.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">ブラウザで開く ↗</a>
-          </div>
-          <div class="wiki-iframe-wrapper">
-            <iframe src="${item.mobileUrl}" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
-          </div>
+      const leftPanel = document.createElement("div");
+      leftPanel.className = "wiki-sticky-panel";
+      leftPanel.innerHTML = `
+        <div class="wiki-header">
+          <h3>Wikipedia 参照</h3>
+          <a href="${firstItem.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">ブラウザで開く ↗</a>
         </div>
+        <div class="wiki-iframe-wrapper">
+          <iframe src="${firstItem.mobileUrl}" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+        </div>
+      `;
+      layout.appendChild(leftPanel);
 
-        <!-- 右：Notion登録フォーム -->
-        <div class="form-panel">
+      const rightColumn = document.createElement("div");
+      rightColumn.className = "forms-column";
+
+      currentResults.forEach((work, idx) => {
+        const card = document.createElement("div");
+        card.className = "season-card";
+
+        // 第1期の場合のみ「+ (第1期) を追加」ボタンを表示
+        const isSeason1 = (work.seasonNum === 1 || !work.seasonNum);
+        const season1BtnHtml = isSeason1
+          ? `<button type="button" class="toggle-season1-btn" id="s1-btn-${idx}" onclick="toggleSeason1Title(${idx})">+ (第1期) を追加</button>`
+          : "";
+
+        card.innerHTML = `
+          <div class="card-title-header">${work.title}</div>
+
           <div class="form-row">
             <div class="form-label">作品名:</div>
-            <div><input type="text" id="reg-title" value="${item.title} (第1期)"></div>
+            <div class="title-input-box">
+              <input type="text" id="reg-title-${idx}" value="${work.title}">
+              ${season1BtnHtml}
+            </div>
           </div>
 
           <div class="form-row">
             <div class="form-label">放送クール:</div>
             <div class="tag-container">
-              <div class="tag-list" id="season-tag-list"></div>
+              <div class="tag-list" id="season-tag-list-${idx}"></div>
               
               <div class="season-picker">
-                <select id="season-year-select">
+                <select id="season-year-select-${idx}">
                   ${yearOptions}
                 </select>
                 <div class="season-btn-group">
-                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '冬')">冬</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '春')">春</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '夏')">夏</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(this, '秋')">秋</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '冬')">冬</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '春')">春</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '夏')">夏</button>
+                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '秋')">秋</button>
                 </div>
-                <button type="button" class="add-btn-small" onclick="addSeasonTag()">クール追加</button>
+                <button type="button" class="add-btn-small" onclick="addSeasonTag(${idx})">クール追加</button>
               </div>
             </div>
           </div>
@@ -303,135 +358,164 @@
           <div class="form-row">
             <div class="form-label">ジャンル:</div>
             <div class="tag-container">
-              <div class="tag-list" id="genre-tag-list"></div>
+              <div class="tag-list" id="genre-tag-list-${idx}"></div>
               <div class="genre-add-box">
-                <input type="text" id="new-genre-input" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag();}">
-                <button type="button" class="add-btn-small" onclick="addGenreTag()">追加</button>
+                <input type="text" id="new-genre-input-${idx}" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag(${idx});}">
+                <button type="button" class="add-btn-small" onclick="addGenreTag(${idx})">追加</button>
               </div>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-label">制作会社:</div>
-            <div><input type="text" id="reg-studios" value="${joinStr(initial.studios)}"></div>
+            <div><input type="text" id="reg-studios-${idx}" value="${joinStr(work.studios)}"></div>
           </div>
 
           <div class="form-row">
             <div class="form-label">原作者:</div>
-            <div><input type="text" id="reg-authors" value="${joinStr(initial.authors)}"></div>
+            <div><input type="text" id="reg-authors-${idx}" value="${joinStr(work.authors)}"></div>
           </div>
 
           <div class="form-row">
             <div class="form-label">監督:</div>
-            <div><input type="text" id="reg-directors" value="${joinStr(initial.directors)}"></div>
+            <div><input type="text" id="reg-directors-${idx}" value="${joinStr(work.directors)}"></div>
           </div>
 
           <div class="form-row">
             <div class="form-label">キャラデザ:</div>
-            <div><input type="text" id="reg-charaDesigns" value="${joinStr(initial.charaDesigns)}"></div>
+            <div><input type="text" id="reg-charaDesigns-${idx}" value="${joinStr(work.charaDesigns)}"></div>
           </div>
 
           <div class="form-row">
             <div class="form-label">音楽:</div>
-            <div><input type="text" id="reg-musics" value="${joinStr(initial.musics)}"></div>
+            <div><input type="text" id="reg-musics-${idx}" value="${joinStr(work.musics)}"></div>
           </div>
 
           <div class="action-panel">
-            <select id="reg-status" class="status-select">
+            <select id="reg-status-${idx}" class="status-select">
               <option value="未視聴">未視聴</option>
               <option value="視聴中">視聴中</option>
               <option value="視聴済" selected>視聴済</option>
               <option value="視聴完了">視聴完了</option>
               <option value="中断">中断</option>
             </select>
-            <button id="registerBtn" onclick="executeRegister()">この内容でNotionに登録</button>
-            <span id="statusMsg" class="status-msg"></span>
+            <button id="registerBtn-${idx}" onclick="executeRegister(${idx})">この内容でNotionに登録</button>
+            <span id="statusMsg-${idx}" class="status-msg"></span>
           </div>
-        </div>
-      `;
+        `;
 
-      resultsDiv.appendChild(container);
-      renderSeasonTags();
-      renderGenreTags();
+        rightColumn.appendChild(card);
+      });
+
+      layout.appendChild(rightColumn);
+      resultsDiv.appendChild(layout);
+
+      currentResults.forEach((_, idx) => {
+        renderSeasonTags(idx);
+        renderGenreTags(idx);
+      });
     }
 
-    function toggleQuarter(btn, qName) {
-      if (selectedSeasonQuarter === qName) {
-        selectedSeasonQuarter = "";
+    // 「(第1期)」の付け外しトグル処理
+    function toggleSeason1Title(idx) {
+      const input = document.getElementById(`reg-title-${idx}`);
+      const btn = document.getElementById(`s1-btn-${idx}`);
+      let val = input.value.trim();
+
+      if (val.includes("(第1期)")) {
+        val = val.replace(/\s*\(第1期\)/g, "").trim();
+        btn.textContent = "+ (第1期) を追加";
         btn.classList.remove("active");
       } else {
-        selectedSeasonQuarter = qName;
-        document.querySelectorAll(".season-btn").forEach(b => b.classList.remove("active"));
+        val = `${val} (第1期)`;
+        btn.textContent = "- (第1期) を解除";
+        btn.classList.add("active");
+      }
+      input.value = val;
+    }
+
+    function toggleQuarter(cardIdx, btn, qName) {
+      const state = cardStates[cardIdx];
+      const cardEl = btn.closest(".season-card");
+      if (state.selectedQuarter === qName) {
+        state.selectedQuarter = "";
+        btn.classList.remove("active");
+      } else {
+        state.selectedQuarter = qName;
+        cardEl.querySelectorAll(".season-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
       }
     }
 
-    function addSeasonTag() {
-      const year = document.getElementById("season-year-select").value;
-      const tag = selectedSeasonQuarter ? `${year} ${selectedSeasonQuarter}` : `${year}`;
+    function addSeasonTag(cardIdx) {
+      const state = cardStates[cardIdx];
+      const year = document.getElementById(`season-year-select-${cardIdx}`).value;
+      const tag = state.selectedQuarter ? `${year} ${state.selectedQuarter}` : `${year}`;
 
-      if (!stateSeasons.includes(tag)) {
-        stateSeasons.push(tag);
-        renderSeasonTags();
+      if (!state.seasons.includes(tag)) {
+        state.seasons.push(tag);
+        renderSeasonTags(cardIdx);
       }
     }
 
-    function removeSeasonTag(idx) {
-      stateSeasons.splice(idx, 1);
-      renderSeasonTags();
+    function removeSeasonTag(cardIdx, tagIdx) {
+      cardStates[cardIdx].seasons.splice(tagIdx, 1);
+      renderSeasonTags(cardIdx);
     }
 
-    function renderSeasonTags() {
-      const list = document.getElementById("season-tag-list");
+    function renderSeasonTags(cardIdx) {
+      const list = document.getElementById(`season-tag-list-${cardIdx}`);
       list.innerHTML = "";
-      stateSeasons.forEach((tag, idx) => {
+      cardStates[cardIdx].seasons.forEach((tag, tIdx) => {
         const item = document.createElement("span");
         item.className = "tag-item";
-        item.innerHTML = `${tag} <span class="tag-close" onclick="removeSeasonTag(${idx})">&times;</span>`;
+        item.innerHTML = `${tag} <span class="tag-close" onclick="removeSeasonTag(${cardIdx}, ${tIdx})">&times;</span>`;
         list.appendChild(item);
       });
     }
 
-    function addGenreTag() {
-      const input = document.getElementById("new-genre-input");
+    function addGenreTag(cardIdx) {
+      const state = cardStates[cardIdx];
+      const input = document.getElementById(`new-genre-input-${cardIdx}`);
       const val = input.value.trim();
       if (!val) return;
-      if (!stateGenres.includes(val)) {
-        stateGenres.push(val);
-        renderGenreTags();
+      if (!state.genres.includes(val)) {
+        state.genres.push(val);
+        renderGenreTags(cardIdx);
       }
       input.value = "";
     }
 
-    function removeGenreTag(idx) {
-      stateGenres.splice(idx, 1);
-      renderGenreTags();
+    function removeGenreTag(cardIdx, tagIdx) {
+      cardStates[cardIdx].genres.splice(tagIdx, 1);
+      renderGenreTags(cardIdx);
     }
 
-    function renderGenreTags() {
-      const list = document.getElementById("genre-tag-list");
+    function renderGenreTags(cardIdx) {
+      const list = document.getElementById(`genre-tag-list-${cardIdx}`);
       list.innerHTML = "";
-      stateGenres.forEach((tag, idx) => {
+      cardStates[cardIdx].genres.forEach((tag, tIdx) => {
         const item = document.createElement("span");
         item.className = "tag-item";
-        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${idx})">&times;</span>`;
+        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${cardIdx}, ${tIdx})">&times;</span>`;
         list.appendChild(item);
       });
     }
 
-    async function executeRegister() {
-      const btn = document.getElementById("registerBtn");
-      const msg = document.getElementById("statusMsg");
+    async function executeRegister(cardIdx) {
+      const btn = document.getElementById(`registerBtn-${cardIdx}`);
+      const msg = document.getElementById(`statusMsg-${cardIdx}`);
+      const state = cardStates[cardIdx];
 
       const splitCsv = (id) => document.getElementById(id).value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
 
-      const title = document.getElementById("reg-title").value.trim();
-      const studios = splitCsv("reg-studios");
-      const authors = splitCsv("reg-authors");
-      const directors = splitCsv("reg-directors");
-      const charaDesigns = splitCsv("reg-charaDesigns");
-      const musics = splitCsv("reg-musics");
-      const status = document.getElementById("reg-status").value;
+      const title = document.getElementById(`reg-title-${cardIdx}`).value.trim();
+      const studios = splitCsv(`reg-studios-${cardIdx}`);
+      const authors = splitCsv(`reg-authors-${cardIdx}`);
+      const directors = splitCsv(`reg-directors-${cardIdx}`);
+      const charaDesigns = splitCsv(`reg-charaDesigns-${cardIdx}`);
+      const musics = splitCsv(`reg-musics-${cardIdx}`);
+      const status = document.getElementById(`reg-status-${cardIdx}`).value;
 
       btn.disabled = true;
       msg.textContent = "Notionへ登録中...";
@@ -443,8 +527,8 @@
           workData: {
             title: title,
             status: status,
-            seasons: stateSeasons,
-            genres: stateGenres,
+            seasons: state.seasons,
+            genres: state.genres,
             studios: studios,
             authors: authors,
             directors: directors,
