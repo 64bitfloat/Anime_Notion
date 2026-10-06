@@ -113,15 +113,6 @@
 
     let currentResults = [];
 
-    async function sendToGas(payloadObj) {
-      // CORSプリフライトを回避するため、単純リクエスト形式で送信
-      const response = await fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify(payloadObj)
-      });
-      return await response.json();
-    }
-
     async function search() {
       const keyword = document.getElementById("keyword").value.trim();
       if (!keyword) return;
@@ -132,7 +123,11 @@
       searchBtn.disabled = true;
 
       try {
-        const res = await sendToGas({ action: "search", keyword: keyword });
+        // GET通信でパラメータを付与して安全に取得
+        const targetUrl = `${GAS_URL}?action=search&keyword=${encodeURIComponent(keyword)}`;
+        const response = await fetch(targetUrl);
+        const res = await response.json();
+
         searchBtn.disabled = false;
 
         if (res.status !== "success" || !res.data || res.data.length === 0) {
@@ -202,17 +197,26 @@
 
       try {
         const payload = {
-          title: work.title,
-          status: statusSelect.value,
-          seasons: work.season ? [work.season] : [],
-          studios: work.studios,
-          authors: work.authors,
-          directors: work.directors,
-          charaDesigns: work.charaDesigns,
-          musics: work.musics
+          action: "register",
+          workData: {
+            title: work.title,
+            status: statusSelect.value,
+            seasons: work.season ? [work.season] : [],
+            studios: work.studios,
+            authors: work.authors,
+            directors: work.directors,
+            charaDesigns: work.charaDesigns,
+            musics: work.musics
+          }
         };
 
-        const res = await sendToGas({ action: "register", workData: payload });
+        // 単純リクエスト（no-cors回避）でテキスト送信
+        const response = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        const res = await response.json();
 
         if (res.status === "success") {
           msg.textContent = "✔ 登録完了！";
