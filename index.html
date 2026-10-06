@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>アニメ情報 Notion 登録ツール (Wikipedia 照会)</title>
+  <title>アニメ情報 Notion 登録ツール (Wikipedia照会)</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 1200px;
-      margin: 30px auto;
+      max-width: 1250px;
+      margin: 25px auto;
       padding: 0 20px;
       color: #333;
       background-color: #f7f7f5;
@@ -22,7 +22,7 @@
     .search-box {
       display: flex;
       gap: 8px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
     .search-box input[type="text"] {
       flex: 1;
@@ -32,7 +32,7 @@
       border-radius: 6px;
     }
     button {
-      padding: 10px 20px;
+      padding: 10px 22px;
       font-size: 1rem;
       background-color: #0b6bcb;
       color: #fff;
@@ -43,77 +43,60 @@
     button:hover { background-color: #185ea5; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
 
-    /* 2カラム表示 */
+    /* 左右2分割レイアウト */
     .compare-container {
       display: grid;
-      grid-template-columns: 420px 1fr;
+      grid-template-columns: 480px 1fr;
       gap: 20px;
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
       padding: 20px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-      margin-bottom: 30px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     }
-    @media (max-width: 900px) {
-      .compare-container {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 950px) {
+      .compare-container { grid-template-columns: 1fr; }
     }
 
-    /* 左カラム：Wikipediaそのままの表 */
+    /* 左カラム：Wikipediaの埋め込み */
     .wiki-view-panel {
+      display: flex;
+      flex-direction: column;
       border-right: 1px solid #eee;
       padding-right: 20px;
-      max-height: 800px;
-      overflow-y: auto;
     }
-    @media (max-width: 900px) {
-      .wiki-view-panel {
-        border-right: none;
-        border-bottom: 1px solid #eee;
-        padding-right: 0;
-        padding-bottom: 20px;
-      }
+    @media (max-width: 950px) {
+      .wiki-view-panel { border-right: none; border-bottom: 1px solid #eee; padding-right: 0; padding-bottom: 20px; }
     }
     .wiki-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-    .wiki-header h3 { margin: 0; font-size: 1.1rem; }
-    .wiki-link {
-      font-size: 0.85rem;
-      color: #0b6bcb;
-      text-decoration: none;
-    }
+    .wiki-header h3 { margin: 0; font-size: 1.05rem; }
+    .wiki-link { font-size: 0.85rem; color: #0b6bcb; text-decoration: none; }
     .wiki-link:hover { text-decoration: underline; }
-
-    /* 移植されたWikipedia表のスタイル補正 */
-    .wiki-table-wrapper table {
-      width: 100% !important;
-      font-size: 0.82rem !important;
-      border-collapse: collapse !important;
-      border: 1px solid #ccc !important;
-      background-color: #f9f9f9 !important;
-      line-height: 1.4 !important;
+    
+    .wiki-iframe-wrapper {
+      flex: 1;
+      height: 680px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      overflow: hidden;
+      background-color: #fafafa;
     }
-    .wiki-table-wrapper th, .wiki-table-wrapper td {
-      border: 1px solid #ddd !important;
-      padding: 5px 8px !important;
-    }
-    .wiki-table-wrapper th {
-      background-color: #eaecf0 !important;
-      text-align: left !important;
-      width: 32% !important;
+    .wiki-iframe-wrapper iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
     }
 
     /* 右カラム：入力フォーム */
     .form-panel {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
     .form-row {
       display: grid;
@@ -122,10 +105,7 @@
       align-items: center;
       font-size: 0.9rem;
     }
-    .form-label {
-      color: #666;
-      font-weight: bold;
-    }
+    .form-label { color: #666; font-weight: bold; }
     .form-row input[type="text"] {
       padding: 8px 10px;
       font-size: 0.95rem;
@@ -135,18 +115,8 @@
       box-sizing: border-box;
     }
 
-    /* タグ一覧・追加共通スタイル */
-    .tag-container {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .tag-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      min-height: 28px;
-    }
+    .tag-container { display: flex; flex-direction: column; gap: 6px; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
     .tag-item {
       display: inline-flex;
       align-items: center;
@@ -158,13 +128,7 @@
       font-size: 0.85rem;
       font-weight: 500;
     }
-    .tag-close {
-      margin-left: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      color: #7b9ebc;
-      font-size: 14px;
-    }
+    .tag-close { margin-left: 6px; cursor: pointer; font-weight: bold; color: #7b9ebc; font-size: 14px; }
     .tag-close:hover { color: #c92a2a; }
 
     /* クール選択UI */
@@ -173,9 +137,13 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
+      background-color: #f9f9f9;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #eee;
     }
     .season-picker select {
-      padding: 6px 10px;
+      padding: 6px 8px;
       font-size: 0.9rem;
       border: 1px solid #ccc;
       border-radius: 6px;
@@ -198,24 +166,12 @@
       cursor: pointer;
     }
     .season-btn:last-child { border-right: none; }
-    .season-btn:hover { background-color: #eee; }
-    .season-btn.active {
-      background-color: #0b6bcb;
-      color: #fff;
-    }
-    .add-btn-small {
-      padding: 6px 12px;
-      font-size: 0.85rem;
-      background-color: #555;
-    }
+    .season-btn:hover { background-color: #f0f0f0; }
+    .season-btn.active { background-color: #0b6bcb; color: #fff; }
+    .add-btn-small { padding: 6px 12px; font-size: 0.85rem; background-color: #555; }
     .add-btn-small:hover { background-color: #333; }
 
-    /* ジャンル追加UI */
-    .genre-add-box {
-      display: flex;
-      gap: 6px;
-      max-width: 300px;
-    }
+    .genre-add-box { display: flex; gap: 6px; max-width: 320px; }
 
     .action-panel {
       margin-top: 10px;
@@ -232,10 +188,8 @@
       border-radius: 6px;
       background: #fff;
     }
-    .status-msg {
-      font-weight: bold;
-      font-size: 0.95rem;
-    }
+    .status-msg { font-weight: bold; font-size: 0.95rem; }
+    .loading-notice { font-size: 1rem; color: #555; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -255,7 +209,7 @@
     let currentResults = [];
     let stateSeasons = [];
     let stateGenres = [];
-    let selectedSeasonQuarter = ""; // "冬", "春", "夏", "秋" または ""
+    let selectedSeasonQuarter = "";
 
     async function search() {
       const keyword = document.getElementById("keyword").value.trim();
@@ -263,7 +217,7 @@
 
       const resultsDiv = document.getElementById("results");
       const searchBtn = document.getElementById("searchBtn");
-      resultsDiv.innerHTML = "<p>Wikipediaから情報を取得中...</p>";
+      resultsDiv.innerHTML = "<p class='loading-notice'>🔍 Wikipediaから情報を照会中...</p>";
       searchBtn.disabled = true;
 
       try {
@@ -294,9 +248,8 @@
       const initial = item.initial || {};
 
       stateGenres = initial.genres || [];
-      stateSeasons = []; // 初期は空（プルダウンからポチポチ追加）
+      stateSeasons = [];
 
-      // 西暦（2000〜2050）のオプション生成
       let yearOptions = "";
       for (let y = 2000; y <= 2050; y++) {
         const isSelected = (y === 2009) ? "selected" : "";
@@ -309,14 +262,14 @@
       container.className = "compare-container";
 
       container.innerHTML = `
-        <!-- 左：Wikipediaの表そのものを移植 -->
+        <!-- 左：Wikipediaの埋め込み（インフォボックスが即座に確認可能） -->
         <div class="wiki-view-panel">
           <div class="wiki-header">
-            <h3>Wikipedia情報</h3>
-            <a href="${item.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">Wikiを開く ↗</a>
+            <h3>Wikipedia 参照</h3>
+            <a href="${item.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">ブラウザで開く ↗</a>
           </div>
-          <div class="wiki-table-wrapper">
-            ${item.tableHtml}
+          <div class="wiki-iframe-wrapper">
+            <iframe src="${item.mobileUrl}" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
           </div>
         </div>
 
@@ -332,7 +285,6 @@
             <div class="tag-container">
               <div class="tag-list" id="season-tag-list"></div>
               
-              <!-- クール選択ピッカー（年 ＋ 春夏秋冬 ＋ 追加） -->
               <div class="season-picker">
                 <select id="season-year-select">
                   ${yearOptions}
@@ -380,4 +332,148 @@
           </div>
 
           <div class="form-row">
-            <div
+            <div class="form-label">音楽:</div>
+            <div><input type="text" id="reg-musics" value="${joinStr(initial.musics)}"></div>
+          </div>
+
+          <div class="action-panel">
+            <select id="reg-status" class="status-select">
+              <option value="未視聴">未視聴</option>
+              <option value="視聴中">視聴中</option>
+              <option value="視聴済" selected>視聴済</option>
+              <option value="視聴完了">視聴完了</option>
+              <option value="中断">中断</option>
+            </select>
+            <button id="registerBtn" onclick="executeRegister()">この内容でNotionに登録</button>
+            <span id="statusMsg" class="status-msg"></span>
+          </div>
+        </div>
+      `;
+
+      resultsDiv.appendChild(container);
+      renderSeasonTags();
+      renderGenreTags();
+    }
+
+    function toggleQuarter(btn, qName) {
+      if (selectedSeasonQuarter === qName) {
+        selectedSeasonQuarter = "";
+        btn.classList.remove("active");
+      } else {
+        selectedSeasonQuarter = qName;
+        document.querySelectorAll(".season-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      }
+    }
+
+    function addSeasonTag() {
+      const year = document.getElementById("season-year-select").value;
+      const tag = selectedSeasonQuarter ? `${year} ${selectedSeasonQuarter}` : `${year}`;
+
+      if (!stateSeasons.includes(tag)) {
+        stateSeasons.push(tag);
+        renderSeasonTags();
+      }
+    }
+
+    function removeSeasonTag(idx) {
+      stateSeasons.splice(idx, 1);
+      renderSeasonTags();
+    }
+
+    function renderSeasonTags() {
+      const list = document.getElementById("season-tag-list");
+      list.innerHTML = "";
+      stateSeasons.forEach((tag, idx) => {
+        const item = document.createElement("span");
+        item.className = "tag-item";
+        item.innerHTML = `${tag} <span class="tag-close" onclick="removeSeasonTag(${idx})">&times;</span>`;
+        list.appendChild(item);
+      });
+    }
+
+    function addGenreTag() {
+      const input = document.getElementById("new-genre-input");
+      const val = input.value.trim();
+      if (!val) return;
+      if (!stateGenres.includes(val)) {
+        stateGenres.push(val);
+        renderGenreTags();
+      }
+      input.value = "";
+    }
+
+    function removeGenreTag(idx) {
+      stateGenres.splice(idx, 1);
+      renderGenreTags();
+    }
+
+    function renderGenreTags() {
+      const list = document.getElementById("genre-tag-list");
+      list.innerHTML = "";
+      stateGenres.forEach((tag, idx) => {
+        const item = document.createElement("span");
+        item.className = "tag-item";
+        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${idx})">&times;</span>`;
+        list.appendChild(item);
+      });
+    }
+
+    async function executeRegister() {
+      const btn = document.getElementById("registerBtn");
+      const msg = document.getElementById("statusMsg");
+
+      const splitCsv = (id) => document.getElementById(id).value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+
+      const title = document.getElementById("reg-title").value.trim();
+      const studios = splitCsv("reg-studios");
+      const authors = splitCsv("reg-authors");
+      const directors = splitCsv("reg-directors");
+      const charaDesigns = splitCsv("reg-charaDesigns");
+      const musics = splitCsv("reg-musics");
+      const status = document.getElementById("reg-status").value;
+
+      btn.disabled = true;
+      msg.textContent = "Notionへ登録中...";
+      msg.style.color = "#0b6bcb";
+
+      try {
+        const payload = {
+          action: "register",
+          workData: {
+            title: title,
+            status: status,
+            seasons: stateSeasons,
+            genres: stateGenres,
+            studios: studios,
+            authors: authors,
+            directors: directors,
+            charaDesigns: charaDesigns,
+            musics: musics
+          }
+        };
+
+        const response = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        const res = await response.json();
+
+        if (res.status === "success") {
+          msg.textContent = "✔ Notionに登録完了しました！";
+          msg.style.color = "#0a7c42";
+        } else {
+          msg.textContent = `❌ エラー: ${res.message}`;
+          msg.style.color = "red";
+          btn.disabled = false;
+        }
+      } catch (err) {
+        msg.textContent = `❌ 通信エラー: ${err.message}`;
+        msg.style.color = "red";
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
