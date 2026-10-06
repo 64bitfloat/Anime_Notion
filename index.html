@@ -109,10 +109,18 @@
   <div id="results"></div>
 
   <script>
-    // デプロイしたGASのURL（反映済み）
-    const GAS_URL = `https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pcOIOAAQOR6YDmBCK7FxgYynrCspRWTxF6dw/exec`;
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pcOIOAAQOR6YDmBCK7FxgYynrCspRWTxF6dw/exec";
 
     let currentResults = [];
+
+    async function sendToGas(payloadObj) {
+      // CORSプリフライトを回避するため、単純リクエスト形式で送信
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify(payloadObj)
+      });
+      return await response.json();
+    }
 
     async function search() {
       const keyword = document.getElementById("keyword").value.trim();
@@ -124,13 +132,7 @@
       searchBtn.disabled = true;
 
       try {
-        const response = await fetch(GAS_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "search", keyword: keyword })
-        });
-
-        const res = await response.json();
+        const res = await sendToGas({ action: "search", keyword: keyword });
         searchBtn.disabled = false;
 
         if (res.status !== "success" || !res.data || res.data.length === 0) {
@@ -210,13 +212,7 @@
           musics: work.musics
         };
 
-        const response = await fetch(GAS_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "register", workData: payload })
-        });
-
-        const res = await response.json();
+        const res = await sendToGas({ action: "register", workData: payload });
 
         if (res.status === "success") {
           msg.textContent = "✔ 登録完了！";
