@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>アニメ情報 Notion 登録ツール</title>
+  <title>アニメ情報 Notion 登録ツール (Wikipedia準拠)</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 800px;
+      max-width: 850px;
       margin: 40px auto;
       padding: 0 20px;
       color: #333;
@@ -24,11 +24,17 @@
       margin-bottom: 24px;
     }
     input[type="text"] {
-      flex: 1;
-      padding: 10px 14px;
-      font-size: 1rem;
+      padding: 8px 12px;
+      font-size: 0.95rem;
       border: 1px solid #ccc;
       border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .search-box input[type="text"] {
+      flex: 1;
+      font-size: 1rem;
+      padding: 10px 14px;
     }
     select {
       padding: 8px 12px;
@@ -46,70 +52,70 @@
       border-radius: 6px;
       cursor: pointer;
     }
-    button:hover {
-      background-color: #185ea5;
-    }
-    button:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
-    }
+    button:hover { background-color: #185ea5; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
     .card {
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .card h3 {
-      margin-top: 0;
-      margin-bottom: 8px;
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
     }
-    .meta-list {
+    .card-header h3 { margin: 0; font-size: 1.25rem; }
+    .wiki-link {
+      font-size: 0.85rem;
+      color: #0b6bcb;
+      text-decoration: none;
+    }
+    .wiki-link:hover { text-decoration: underline; }
+    .form-grid {
       display: grid;
-      grid-template-columns: 100px 1fr;
-      row-gap: 6px;
-      font-size: 0.9rem;
+      grid-template-columns: 110px 1fr;
+      row-gap: 8px;
+      column-gap: 12px;
+      align-items: center;
       margin-bottom: 16px;
+      font-size: 0.9rem;
     }
-    .meta-label {
+    .form-label {
       color: #666;
       font-weight: bold;
-    }
-    .tag {
-      display: inline-block;
-      background: #eef2f6;
-      color: #333;
-      padding: 2px 8px;
-      border-radius: 4px;
-      margin-right: 4px;
-      margin-bottom: 4px;
     }
     .action-row {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-top: 12px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #eee;
     }
     .status-msg {
       font-weight: bold;
-      color: #0b6bcb;
+      font-size: 0.95rem;
     }
   </style>
 </head>
 <body>
 
-  <h1>アニメ情報 Notion 登録</h1>
+  <h1>アニメ情報 Notion 登録 (Wikipedia準拠)</h1>
 
   <div class="search-box">
-    <input type="text" id="keyword" placeholder="作品名を入力（例: ぼっち・ざ・ろっく！）" onkeydown="if(event.key==='Enter') search();">
+    <input type="text" id="keyword" placeholder="作品名を入力（例: けいおん！、ぼっち・ざ・ろっく！）" onkeydown="if(event.key==='Enter') search();">
     <button onclick="search()" id="searchBtn">検索</button>
   </div>
 
   <div id="results"></div>
 
   <script>
-    // 最新の正しいGASウェブアプリURL
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pc0IOAAQ0R6YDmmBCK7FxgYynrCspRWTxF6dw/exec";
 
     let currentResults = [];
@@ -120,7 +126,7 @@
 
       const resultsDiv = document.getElementById("results");
       const searchBtn = document.getElementById("searchBtn");
-      resultsDiv.innerHTML = "<p>検索中...</p>";
+      resultsDiv.innerHTML = "<p>Wikipediaから情報を取得中...</p>";
       searchBtn.disabled = true;
 
       try {
@@ -131,7 +137,7 @@
         searchBtn.disabled = false;
 
         if (res.status !== "success" || !res.data || res.data.length === 0) {
-          resultsDiv.innerHTML = "<p>該当する作品が見つかりませんでした。</p>";
+          resultsDiv.innerHTML = "<p>Wikipedia上にアニメの該当記事が見つかりませんでした。</p>";
           return;
         }
 
@@ -151,31 +157,44 @@
         const card = document.createElement("div");
         card.className = "card";
 
-        const tagsHtml = (list) => list.length > 0
-          ? list.map(item => `<span class="tag">${item}</span>`).join("")
-          : "<span style='color:#999;'>情報なし</span>";
+        const joinVal = (arr) => (arr || []).join(", ");
 
         card.innerHTML = `
-          <h3>${work.title}</h3>
-          <div class="meta-list">
-            <div class="meta-label">放送時期:</div>
-            <div>${work.season || "情報なし"}</div>
-            <div class="meta-label">制作会社:</div>
-            <div>${tagsHtml(work.studios)}</div>
-            <div class="meta-label">原作者:</div>
-            <div>${tagsHtml(work.authors)}</div>
-            <div class="meta-label">監督:</div>
-            <div>${tagsHtml(work.directors)}</div>
-            <div class="meta-label">キャラデザ:</div>
-            <div>${tagsHtml(work.charaDesigns)}</div>
-            <div class="meta-label">音楽:</div>
-            <div>${tagsHtml(work.musics)}</div>
+          <div class="card-header">
+            <h3>${work.title}</h3>
+            <a href="${work.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">Wikipediaで確認 ↗</a>
+          </div>
+          <div class="form-grid">
+            <div class="form-label">登録タイトル:</div>
+            <div><input type="text" id="title-${index}" value="${work.title}"></div>
+
+            <div class="form-label">放送クール:</div>
+            <div><input type="text" id="seasons-${index}" value="${joinVal(work.seasons)}" placeholder="例: 2009 春"></div>
+
+            <div class="form-label">ジャンル:</div>
+            <div><input type="text" id="genres-${index}" value="${joinVal(work.genres)}" placeholder="カンマ区切り (例: 学園, 音楽)"></div>
+
+            <div class="form-label">制作会社:</div>
+            <div><input type="text" id="studios-${index}" value="${joinVal(work.studios)}"></div>
+
+            <div class="form-label">原作者:</div>
+            <div><input type="text" id="authors-${index}" value="${joinVal(work.authors)}"></div>
+
+            <div class="form-label">監督:</div>
+            <div><input type="text" id="directors-${index}" value="${joinVal(work.directors)}"></div>
+
+            <div class="form-label">キャラデザ:</div>
+            <div><input type="text" id="charaDesigns-${index}" value="${joinVal(work.charaDesigns)}"></div>
+
+            <div class="form-label">音楽:</div>
+            <div><input type="text" id="musics-${index}" value="${joinVal(work.musics)}"></div>
           </div>
           <div class="action-row">
             <select id="status-${index}">
               <option value="未視聴">未視聴</option>
               <option value="視聴中">視聴中</option>
-              <option value="視聴完了" selected>視聴完了</option>
+              <option value="視聴済" selected>視聴済</option>
+              <option value="視聴完了">視聴完了</option>
               <option value="中断">中断</option>
             </select>
             <button id="btn-${index}" onclick="registerNotion(${index})">この内容でNotionに登録</button>
@@ -187,26 +206,38 @@
     }
 
     async function registerNotion(index) {
-      const work = currentResults[index];
-      const statusSelect = document.getElementById(`status-${index}`);
       const btn = document.getElementById(`btn-${index}`);
       const msg = document.getElementById(`msg-${index}`);
 
+      const parseInput = (id) => document.getElementById(id).value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+
+      const title = document.getElementById(`title-${index}`).value.trim();
+      const seasons = parseInput(`seasons-${index}`);
+      const genres = parseInput(`genres-${index}`);
+      const studios = parseInput(`studios-${index}`);
+      const authors = parseInput(`authors-${index}`);
+      const directors = parseInput(`directors-${index}`);
+      const charaDesigns = parseInput(`charaDesigns-${index}`);
+      const musics = parseInput(`musics-${index}`);
+      const status = document.getElementById(`status-${index}`).value;
+
       btn.disabled = true;
-      msg.textContent = "Notionへ登録中...";
+      msg.textContent = "Notionへ登録中（リレーション紐付け中）...";
+      msg.style.color = "#0b6bcb";
 
       try {
         const payload = {
           action: "register",
           workData: {
-            title: work.title,
-            status: statusSelect.value,
-            seasons: work.season ? [work.season] : [],
-            studios: work.studios,
-            authors: work.authors,
-            directors: work.directors,
-            charaDesigns: work.charaDesigns,
-            musics: work.musics
+            title: title,
+            status: status,
+            seasons: seasons,
+            genres: genres,
+            studios: studios,
+            authors: authors,
+            directors: directors,
+            charaDesigns: charaDesigns,
+            musics: musics
           }
         };
 
@@ -218,7 +249,7 @@
         const res = await response.json();
 
         if (res.status === "success") {
-          msg.textContent = "✔ 登録完了！";
+          msg.textContent = "✔ Notionに登録完了しました！";
           msg.style.color = "#0a7c42";
         } else {
           msg.textContent = `❌ エラー: ${res.message}`;
