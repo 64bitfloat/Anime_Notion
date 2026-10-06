@@ -103,7 +103,6 @@
       font-size: 0.95rem;
     }
 
-    /* ジャンルタグ専用スタイル */
     .genre-container {
       display: flex;
       flex-direction: column;
@@ -206,7 +205,7 @@
         const card = document.createElement("div");
         card.className = "card";
 
-        const joinVal = (arr) => (arr || []).join(", ");
+        const joinVal = (v) => Array.isArray(v) ? v.join(", ") : (v || "");
 
         card.innerHTML = `
           <div class="card-header">
@@ -216,6 +215,9 @@
           <div class="form-grid">
             <div class="form-label">登録タイトル:</div>
             <div><input type="text" id="title-${index}" value="${work.title}"></div>
+
+            <div class="form-label">放送期間:</div>
+            <div><input type="text" id="period-${index}" value="${work.period || ''}" placeholder="例: 2010年4月7日 - 9月29日" oninput="updateSeasonsFromPeriod(${index})"></div>
 
             <div class="form-label">放送クール:</div>
             <div><input type="text" id="seasons-${index}" value="${joinVal(work.seasons)}" placeholder="カンマ区切り（例: 2010 春, 2010 夏）"></div>
@@ -259,6 +261,33 @@
         resultsDiv.appendChild(card);
         renderGenreTags(index);
       });
+    }
+
+    // 放送期間を手動で打ち直した場合にクールをブラウザ上で即座に再計算
+    function updateSeasonsFromPeriod(index) {
+      const periodStr = document.getElementById(`period-${index}`).value;
+      const getQuarterName = (m) => (m <= 3 ? "冬" : m <= 6 ? "春" : m <= 9 ? "夏" : "秋");
+      const rangeRegex = /(\d{4})年\s*(\d{1,2})月(?:\s*\d{1,2}日)?\s*(?:-|–|〜|～)\s*(?:(\d{4})年\s*)?(\d{1,2})月/;
+      const match = periodStr.match(rangeRegex);
+
+      if (match) {
+        const startYear = parseInt(match[1], 10);
+        const startMonth = parseInt(match[2], 10);
+        const endYear = match[3] ? parseInt(match[3], 10) : startYear;
+        const endMonth = parseInt(match[4], 10);
+
+        const quarters = [];
+        let curY = startYear;
+        let curM = startMonth;
+
+        while (curY < endYear || (curY === endYear && curM <= endMonth)) {
+          const qName = `${curY} ${getQuarterName(curM)}`;
+          if (!quarters.includes(qName)) quarters.push(qName);
+          curM += 3;
+          if (curM > 12) { curM -= 12; curY += 1; }
+        }
+        document.getElementById(`seasons-${index}`).value = quarters.join(", ");
+      }
     }
 
     function renderGenreTags(index) {
