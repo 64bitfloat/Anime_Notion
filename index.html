@@ -30,6 +30,13 @@
       border: 1px solid #ccc;
       border-radius: 6px;
     }
+    select {
+      padding: 8px 12px;
+      font-size: 0.95rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #fff;
+    }
     button {
       padding: 10px 20px;
       font-size: 1rem;
@@ -78,6 +85,12 @@
       margin-right: 4px;
       margin-bottom: 4px;
     }
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
     .status-msg {
       font-weight: bold;
       color: #0b6bcb;
@@ -96,7 +109,7 @@
   <div id="results"></div>
 
   <script>
-    // デプロイしたGASのURL（組み込み済み）
+    // デプロイしたGASのURL（反映済み）
     const GAS_URL = `https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pcOIOAAQOR6YDmBCK7FxgYynrCspRWTxF6dw/exec`;
 
     let currentResults = [];
@@ -161,8 +174,16 @@
             <div class="meta-label">音楽:</div>
             <div>${tagsHtml(work.musics)}</div>
           </div>
-          <button id="btn-${index}" onclick="registerNotion(${index})">この内容でNotionに登録</button>
-          <span id="msg-${index}" class="status-msg" style="margin-left: 12px;"></span>
+          <div class="action-row">
+            <select id="status-${index}">
+              <option value="未視聴">未視聴</option>
+              <option value="視聴中">視聴中</option>
+              <option value="視聴完了" selected>視聴完了</option>
+              <option value="中断">中断</option>
+            </select>
+            <button id="btn-${index}" onclick="registerNotion(${index})">この内容でNotionに登録</button>
+            <span id="msg-${index}" class="status-msg"></span>
+          </div>
         `;
         resultsDiv.appendChild(card);
       });
@@ -170,6 +191,7 @@
 
     async function registerNotion(index) {
       const work = currentResults[index];
+      const statusSelect = document.getElementById(`status-${index}`);
       const btn = document.getElementById(`btn-${index}`);
       const msg = document.getElementById(`msg-${index}`);
 
@@ -179,6 +201,7 @@
       try {
         const payload = {
           title: work.title,
+          status: statusSelect.value,
           seasons: work.season ? [work.season] : [],
           studios: work.studios,
           authors: work.authors,
