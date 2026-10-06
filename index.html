@@ -80,7 +80,7 @@
     .form-grid {
       display: grid;
       grid-template-columns: 110px 1fr;
-      row-gap: 8px;
+      row-gap: 12px;
       column-gap: 12px;
       align-items: center;
       margin-bottom: 16px;
@@ -101,6 +101,55 @@
     .status-msg {
       font-weight: bold;
       font-size: 0.95rem;
+    }
+
+    /* ジャンルタグ専用スタイル */
+    .genre-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 28px;
+    }
+    .tag-item {
+      display: inline-flex;
+      align-items: center;
+      background-color: #e3effb;
+      color: #0b6bcb;
+      border: 1px solid #bcd7f5;
+      padding: 3px 8px;
+      border-radius: 16px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .tag-close {
+      margin-left: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #7b9ebc;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .tag-close:hover {
+      color: #c92a2a;
+    }
+    .add-tag-box {
+      display: flex;
+      gap: 6px;
+      max-width: 320px;
+    }
+    .add-tag-btn {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      background-color: #555;
+      white-space: nowrap;
+    }
+    .add-tag-btn:hover {
+      background-color: #333;
     }
   </style>
 </head>
@@ -169,10 +218,16 @@
             <div><input type="text" id="title-${index}" value="${work.title}"></div>
 
             <div class="form-label">放送クール:</div>
-            <div><input type="text" id="seasons-${index}" value="${joinVal(work.seasons)}" placeholder="例: 2009 春"></div>
+            <div><input type="text" id="seasons-${index}" value="${joinVal(work.seasons)}" placeholder="カンマ区切り（例: 2010 春, 2010 夏）"></div>
 
             <div class="form-label">ジャンル:</div>
-            <div><input type="text" id="genres-${index}" value="${joinVal(work.genres)}" placeholder="カンマ区切り (例: 学園, 音楽)"></div>
+            <div class="genre-container">
+              <div class="tag-list" id="tag-list-${index}"></div>
+              <div class="add-tag-box">
+                <input type="text" id="new-genre-${index}" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag(${index});}">
+                <button type="button" class="add-tag-btn" onclick="addGenreTag(${index})">追加</button>
+              </div>
+            </div>
 
             <div class="form-label">制作会社:</div>
             <div><input type="text" id="studios-${index}" value="${joinVal(work.studios)}"></div>
@@ -202,7 +257,42 @@
           </div>
         `;
         resultsDiv.appendChild(card);
+        renderGenreTags(index);
       });
+    }
+
+    function renderGenreTags(index) {
+      const tagListDiv = document.getElementById(`tag-list-${index}`);
+      tagListDiv.innerHTML = "";
+      const currentGenres = currentResults[index].genres || [];
+
+      currentGenres.forEach((tag, tIdx) => {
+        const item = document.createElement("span");
+        item.className = "tag-item";
+        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${index}, ${tIdx})">&times;</span>`;
+        tagListDiv.appendChild(item);
+      });
+    }
+
+    function removeGenreTag(cardIdx, tagIdx) {
+      currentResults[cardIdx].genres.splice(tagIdx, 1);
+      renderGenreTags(cardIdx);
+    }
+
+    function addGenreTag(cardIdx) {
+      const input = document.getElementById(`new-genre-${cardIdx}`);
+      const val = input.value.trim();
+      if (!val) return;
+
+      if (!currentResults[cardIdx].genres) {
+        currentResults[cardIdx].genres = [];
+      }
+
+      if (!currentResults[cardIdx].genres.includes(val)) {
+        currentResults[cardIdx].genres.push(val);
+        renderGenreTags(cardIdx);
+      }
+      input.value = "";
     }
 
     async function registerNotion(index) {
@@ -213,7 +303,7 @@
 
       const title = document.getElementById(`title-${index}`).value.trim();
       const seasons = parseInput(`seasons-${index}`);
-      const genres = parseInput(`genres-${index}`);
+      const genres = currentResults[index].genres || [];
       const studios = parseInput(`studios-${index}`);
       const authors = parseInput(`authors-${index}`);
       const directors = parseInput(`directors-${index}`);
