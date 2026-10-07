@@ -22,7 +22,7 @@
     .search-box {
       display: flex;
       gap: 8px;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     .search-box input[type="text"] {
       flex: 1;
@@ -42,6 +42,48 @@
     }
     button:hover { background-color: #185ea5; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+    /* 候補タイトル選択エリア */
+    .candidates-panel {
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .candidates-header {
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: #444;
+      margin-bottom: 10px;
+    }
+    .candidates-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .candidate-chip {
+      background-color: #f0f4f8;
+      border: 1px solid #cce0f5;
+      color: #0b6bcb;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .candidate-chip:hover {
+      background-color: #0b6bcb;
+      color: #fff;
+      border-color: #0b6bcb;
+    }
+    .candidate-chip.active {
+      background-color: #0b6bcb;
+      color: #fff;
+      border-color: #0b6bcb;
+    }
 
     .compare-layout {
       display: grid;
@@ -126,7 +168,6 @@
       box-sizing: border-box;
     }
 
-    /* タイトル入力エリア用（入力欄＋第1期付与ボタン） */
     .title-input-box {
       display: flex;
       gap: 8px;
@@ -143,9 +184,7 @@
       white-space: nowrap;
       transition: all 0.2s;
     }
-    .toggle-season1-btn:hover {
-      background-color: #dceaf7;
-    }
+    .toggle-season1-btn:hover { background-color: #dceaf7; }
     .toggle-season1-btn.active {
       background-color: #0b6bcb;
       color: #fff;
@@ -225,7 +264,7 @@
       background: #fff;
     }
     .status-msg { font-weight: bold; font-size: 0.95rem; }
-    .loading-notice { font-size: 1rem; color: #555; padding: 20px 0; }
+    .notice-msg { font-size: 0.95rem; color: #555; padding: 12px 0; }
   </style>
 </head>
 <body>
@@ -233,8 +272,14 @@
   <h1>アニメ情報 Notion 登録 (Wikipedia照会ツール)</h1>
 
   <div class="search-box">
-    <input type="text" id="keyword" placeholder="作品名を入力（例: けいおん！、ぼっち・ざ・ろっく！）" onkeydown="if(event.key==='Enter') search();">
-    <button onclick="search()" id="searchBtn">検索</button>
+    <input type="text" id="keyword" placeholder="作品名を入力（例: けいおん！、ヤニねこ、プリキュア）" onkeydown="if(event.key==='Enter') searchCandidates();">
+    <button onclick="searchCandidates()" id="searchBtn">検索</button>
+  </div>
+
+  <!-- 候補一覧表示エリア -->
+  <div id="candidatesContainer" style="display: none;" class="candidates-panel">
+    <div class="candidates-header">該当しそうなタイトルを選択してください：</div>
+    <div id="candidatesList" class="candidates-list"></div>
   </div>
 
   <div id="results"></div>
@@ -245,31 +290,84 @@
     let currentResults = [];
     let cardStates = [];
 
-    async function search() {
+    // ステップ1: 候補タイトル一覧を取得
+    async function searchCandidates() {
       const keyword = document.getElementById("keyword").value.trim();
       if (!keyword) return;
 
       const resultsDiv = document.getElementById("results");
+      const candContainer = document.getElementById("candidatesContainer");
+      const candList = document.getElementById("candidatesList");
       const searchBtn = document.getElementById("searchBtn");
-      resultsDiv.innerHTML = "<p class='loading-notice'>🔍 Wikipediaから情報を照会中...</p>";
+
+      resultsDiv.innerHTML = "<p class='notice-msg'>🔍 候補タイトルを検索中...</p>";
+      candContainer.style.display = "none";
+      candList.innerHTML = "";
       searchBtn.disabled = true;
 
       try {
-        const targetUrl = `${GAS_URL}?action=search&keyword=${encodeURIComponent(keyword)}`;
+        const targetUrl = `${GAS_URL}?action=get_candidates&keyword=${encodeURIComponent(keyword)}`;
         const response = await fetch(targetUrl);
         const res = await response.json();
 
         searchBtn.disabled = false;
 
+        if (res.status !== "success" || !res.candidates || res.candidates.length === 0) {
+          resultsDiv.innerHTML = "<p>Wikipedia上に該当しそうな記事が見つかりませんでした。</p>";
+          return;
+        }
+
+        resultsDiv.innerHTML = "";
+        candContainer.style.display = "block";
+
+        res.candidates.forEach((candTitle, cIdx) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "candidate-chip";
+          chip.textContent = candTitle;
+          chip.onclick = () => {
+            document.querySelectorAll(".candidate-chip").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            loadDetails(candTitle);
+          };
+          candList.appendChild(chip);
+        });
+
+        // 候補の先頭がキーワードと完全一致している場合は即時自動選択
+        const exact = res.candidates.find(c => c.toLowerCase() === keyword.toLowerCase());
+        if (exact) {
+          const firstChip = candList.children[res.candidates.indexOf(exact)];
+          if (firstChip) firstChip.classList.add("active");
+          loadDetails(exact);
+        } else if (res.candidates.length === 1) {
+          candList.children[0].classList.add("active");
+          loadDetails(res.candidates[0]);
+        }
+
+      } catch (err) {
+        searchBtn.disabled = false;
+        resultsDiv.innerHTML = `<p style="color:red;">通信エラーが発生しました: ${err.message}</p>`;
+      }
+    }
+
+    // ステップ2: 選択されたタイトルの詳細を取得
+    async function loadDetails(selectedTitle) {
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.innerHTML = `<p class='notice-msg'>📖 「${selectedTitle}」の情報を読み込み中...</p>`;
+
+      try {
+        const targetUrl = `${GAS_URL}?action=get_details&title=${encodeURIComponent(selectedTitle)}`;
+        const response = await fetch(targetUrl);
+        const res = await response.json();
+
         if (res.status !== "success" || !res.data || res.data.length === 0) {
-          resultsDiv.innerHTML = "<p>Wikipedia上に該当記事が見つかりませんでした。</p>";
+          resultsDiv.innerHTML = `<p>「${selectedTitle}」のアニメ情報が見つかりませんでした。</p>`;
           return;
         }
 
         currentResults = res.data;
         renderLayout();
       } catch (err) {
-        searchBtn.disabled = false;
         resultsDiv.innerHTML = `<p style="color:red;">通信エラーが発生しました: ${err.message}</p>`;
       }
     }
@@ -318,7 +416,6 @@
         const card = document.createElement("div");
         card.className = "season-card";
 
-        // 第1期の場合のみ「+ (第1期) を追加」ボタンを表示
         const isSeason1 = (work.seasonNum === 1 || !work.seasonNum);
         const season1BtnHtml = isSeason1
           ? `<button type="button" class="toggle-season1-btn" id="s1-btn-${idx}" onclick="toggleSeason1Title(${idx})">+ (第1期) を追加</button>`
@@ -416,7 +513,6 @@
       });
     }
 
-    // 「(第1期)」の付け外しトグル処理
     function toggleSeason1Title(idx) {
       const input = document.getElementById(`reg-title-${idx}`);
       const btn = document.getElementById(`s1-btn-${idx}`);
