@@ -1,582 +1,304 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>アニメ情報 Notion 登録ツール (Wikipedia照会)</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 1350px;
-      margin: 20px auto;
-      padding: 0 20px;
-      color: #333;
-      background-color: #f7f7f5;
+const SP = PropertiesService.getScriptProperties();
+
+const CONFIG = {
+  NOTION_API_KEY: SP.getProperty("NOTION_API_KEY"),
+  DB_IDS: {
+    MAIN: SP.getProperty("DB_MAIN"),
+    STUDIO: SP.getProperty("DB_STUDIO"),
+    AUTHOR: SP.getProperty("DB_AUTHOR"),
+    DIRECTOR: SP.getProperty("DB_DIRECTOR"),
+    CHARA_DESIGN: SP.getProperty("DB_CHARA_DESIGN"),
+    MUSIC: SP.getProperty("DB_MUSIC")
+  }
+};
+
+function doGet(e) {
+  const action = e.parameter.action;
+  const keyword = e.parameter.keyword;
+
+  try {
+    if (action === "search") {
+      const results = searchWikipediaAnimeRobust(keyword);
+      return createResponse({ status: "success", data: results });
     }
-    h1 {
-      font-size: 1.35rem;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 8px;
-      margin-bottom: 16px;
+    return createResponse({ status: "error", message: "不明なアクションです" });
+  } catch (err) {
+    return createResponse({ status: "error", message: err.toString() });
+  }
+}
+
+function doPost(e) {
+  try {
+    const contents = e.postData.contents;
+    const req = JSON.parse(contents);
+    const action = req.action;
+
+    if (action === "register") {
+      const result = registerToNotion(req.workData);
+      return createResponse({ status: "success", pageId: result });
     }
-    .search-box {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
+    return createResponse({ status: "error", message: "不明なアクションです" });
+  } catch (err) {
+    return createResponse({ status: "error", message: err.toString() });
+  }
+}
+
+function createResponse(data) {
+  const output = ContentService.createTextOutput(JSON.stringify(data));
+  output.setMimeType(ContentService.MimeType.JSON);
+  return output;
+}
+
+// 安定性100% Wikipedia検索
+function searchWikipediaAnimeRobust(keyword) {
+  if (!keyword) return [];
+  const cleanKeyword = keyword.trim();
+
+  // 1. 記事検索
+  const searchUrl = `https://ja.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanKeyword)}&format=json&utf8=1`;
+  const searchRes = JSON.parse(UrlFetchApp.fetch(searchUrl).getContentText());
+  
+  if (!searchRes.query || !searchRes.query.search || searchRes.query.search.length === 0) {
+    return [];
+  }
+
+  const hits = searchRes.query.search;
+  let targetTitle = "";
+
+  // アニメ専用記事を最優先で選定
+  const animeSpecificMatch = hits.find(h => {
+    const t = h.title.toLowerCase();
+    const k = cleanKeyword.toLowerCase();
+    return (t === `${k} (アニメ)` || t === `${k}（アニメ）` || (t.includes(k) && t.includes("アニメ")));
+  });
+
+  if (animeSpecificMatch) {
+    targetTitle = animeSpecificMatch.title;
+  } else {
+    const exactMatch = hits.find(h => h.title.toLowerCase() === cleanKeyword.toLowerCase());
+    if (exactMatch) {
+      targetTitle = exactMatch.title;
+    } else {
+      const partialMatch = hits.find(h => h.title.includes(cleanKeyword));
+      targetTitle = partialMatch ? partialMatch.title : hits[0].title;
     }
-    .search-box input[type="text"] {
-      flex: 1;
-      padding: 10px 14px;
-      font-size: 1rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
+  }
+
+  let pageData = fetchPageWikitext(targetTitle);
+  if (!pageData) return [];
+
+  // 原作記事だった場合の安全弁（冒頭のアニメ誘導を追跡）
+  const otherusesMatch = pageData.wikitext.match(/\{\{Otheruses[^\}]*?([^\}\|]+アニメ[^\}\|]*)\}\}/i) ||
+                         pageData.wikitext.match(/アニメ(?:化作品)?については[「『]([^」』]+)[」』]/);
+  if (otherusesMatch && otherusesMatch[1] && otherusesMatch[1] !== targetTitle) {
+    const candidateAnimeTitle = otherusesMatch[1].replace(/\[\[\vert{}\]\]/g, "").trim();
+    const animePageData = fetchPageWikitext(candidateAnimeTitle);
+    if (animePageData && animePageData.wikitext.includes("アニメ")) {
+      pageData = animePageData;
     }
-    button {
-      padding: 10px 22px;
-      font-size: 1rem;
-      background-color: #0b6bcb;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover { background-color: #185ea5; }
-    button:disabled { background-color: #ccc; cursor: not-allowed; }
+  }
 
-    .compare-layout {
-      display: grid;
-      grid-template-columns: 460px 1fr;
-      gap: 20px;
-      align-items: start;
-    }
-    @media (max-width: 950px) {
-      .compare-layout { grid-template-columns: 1fr; }
-    }
+  return parseWikitextToSeasons(pageData.wikitext, pageData.title, pageData.pageUrl, pageData.mobileUrl, cleanKeyword);
+}
 
-    /* 左カラム：インフォボックス表専用パネル */
-    .wiki-sticky-panel {
-      position: sticky;
-      top: 20px;
-      background: #fff;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 16px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-    }
-    .wiki-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    .wiki-header h3 { margin: 0; font-size: 1rem; }
-    .wiki-link { font-size: 0.85rem; color: #0b6bcb; text-decoration: none; }
-    .wiki-link:hover { text-decoration: underline; }
-    
-    .wiki-table-container {
-      max-height: 720px;
-      overflow-y: auto;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 10px;
-      background-color: #fff;
-    }
+function fetchPageWikitext(title) {
+  const parseUrl = `https://ja.wikipedia.org/w/api.php?action=query&prop=revisions&titles=${encodeURIComponent(title)}&rvslots=*&rvprop=content&redirects=1&format=json&utf8=1`;
+  const parseRes = JSON.parse(UrlFetchApp.fetch(parseUrl).getContentText());
+  const pages = parseRes.query && parseRes.query.pages ? Object.values(parseRes.query.pages) : [];
 
-    /* Wikipediaの表デザイン再現 */
-    .wiki-table-container table {
-      width: 100% !important;
-      font-size: 0.82rem !important;
-      border-collapse: collapse !important;
-      border: 1px solid #a2a9b1 !important;
-      line-height: 1.4 !important;
-      margin-bottom: 12px !important;
-    }
-    .wiki-table-container th, .wiki-table-container td {
-      border: 1px solid #a2a9b1 !important;
-      padding: 4px 6px !important;
-    }
-    .wiki-table-container th {
-      background-color: #eaecf0 !important;
-      text-align: left !important;
-      width: 32% !important;
-    }
-    /* アニメヘッダーの紫色バー */
-    .wiki-table-container th[style*="background"], 
-    .wiki-table-container td[style*="background"] {
-      background-color: #ccf !important;
-      font-weight: bold !important;
-      text-align: center !important;
-    }
+  if (pages.length === 0 || !pages[0].revisions) return null;
+  const pageObj = pages[0];
 
-    .forms-column {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-    .season-card {
-      background: #fff;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .card-title-header {
-      font-size: 1.15rem;
-      font-weight: bold;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 8px;
-      margin-bottom: 4px;
-      color: #111;
-    }
+  const resolvedTitle = pageObj.title || title;
+  return {
+    title: resolvedTitle,
+    pageUrl: `https://ja.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle)}`,
+    mobileUrl: `https://ja.m.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle)}`,
+    wikitext: (pageObj.revisions[0].slots && pageObj.revisions[0].slots.main) ? (pageObj.revisions[0].slots.main["*"] || "") : ""
+  };
+}
 
-    .form-row {
-      display: grid;
-      grid-template-columns: 90px 1fr;
-      column-gap: 12px;
-      align-items: center;
-      font-size: 0.9rem;
-    }
-    .form-label { color: #666; font-weight: bold; }
-    .form-row input[type="text"] {
-      padding: 8px 10px;
-      font-size: 0.95rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      width: 100%;
-      box-sizing: border-box;
-    }
+function parseWikitextToSeasons(wikitext, title, pageUrl, mobileUrl, keyword) {
+  const clean = (s) => (s || "")
+    .replace(/<nowiki>([\s\S]*?)<\/nowiki>/gi, "$1")
+    .replace(/\[\[[^\]\vert{}]+\Vert{}([^\]]+)\]\]/g, "$1")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/\{\{[^}]+\}\}/g, "")
+    .replace(/<ref[^>]*>[\s\S]*?<\/ref>/gi, "")
+    .replace(/<br\s*\/?>/gi, "、")
+    .trim();
 
-    .title-input-box {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .toggle-season1-btn {
-      padding: 8px 12px;
-      font-size: 0.85rem;
-      background-color: #f0f4f8;
-      color: #0b6bcb;
-      border: 1px solid #bcd7f5;
-      border-radius: 6px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s;
-    }
-    .toggle-season1-btn:hover { background-color: #dceaf7; }
-    .toggle-season1-btn.active {
-      background-color: #0b6bcb;
-      color: #fff;
-      border-color: #0b6bcb;
-    }
+  const getF = (key) => {
+    const reg = new RegExp(`\\|\\s*${key}\\s*=([^\\n|]+)`, "i");
+    const m = wikitext.match(reg);
+    return m ? clean(m[1]) : "";
+  };
 
-    .tag-container { display: flex; flex-direction: column; gap: 6px; }
-    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
-    .tag-item {
-      display: inline-flex;
-      align-items: center;
-      background-color: #e3effb;
-      color: #0b6bcb;
-      border: 1px solid #bcd7f5;
-      padding: 3px 8px;
-      border-radius: 16px;
-      font-size: 0.85rem;
-      font-weight: 500;
-    }
-    .tag-close { margin-left: 6px; cursor: pointer; font-weight: bold; color: #7b9ebc; font-size: 14px; }
-    .tag-close:hover { color: #c92a2a; }
+  const splitNames = (str) => clean(str)
+    .split(/[,、\/\n]/)
+    .map(s => s.replace(/（[^）]*）|\([^)]*\)/g, "").trim())
+    .filter(Boolean);
 
-    .season-picker {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      background-color: #f9f9f9;
-      padding: 8px;
-      border-radius: 6px;
-      border: 1px solid #eee;
-    }
-    .season-picker select {
-      padding: 6px 8px;
-      font-size: 0.9rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background-color: #fff;
-    }
-    .season-btn-group {
-      display: inline-flex;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .season-btn {
-      padding: 6px 10px;
-      font-size: 0.85rem;
-      background-color: #fff;
-      color: #333;
-      border: none;
-      border-right: 1px solid #ccc;
-      border-radius: 0;
-      cursor: pointer;
-    }
-    .season-btn:last-child { border-right: none; }
-    .season-btn:hover { background-color: #f0f0f0; }
-    .season-btn.active { background-color: #0b6bcb; color: #fff; }
-    .add-btn-small { padding: 6px 12px; font-size: 0.85rem; background-color: #555; }
-    .add-btn-small:hover { background-color: #333; }
+  let genres = [];
+  const gm = wikitext.match(/\|\s*ジャンル\s*=([\s\S]*?)(?=\n\s*[|}])/i);
+  if (gm) {
+    genres = clean(gm[1])
+      .split(/[,、・\/\n\s*]+/)
+      .map(s => s.trim().replace(/^[\*:\s]+/, ""))
+      .filter(s => s && !s.includes("=") && !s.includes("Infobox") && s !== "アニメ");
+  }
+  genres = [...new Set(genres)];
 
-    .genre-add-box { display: flex; gap: 6px; max-width: 320px; }
+  const authors = splitNames(getF("原作") || getF("原案") || getF("著者"));
+  const defaultStudios = splitNames(getF("アニメーション制作") || getF("制作"));
+  const defaultDirectors = splitNames(getF("監督") || getF("総監督"));
+  const defaultCharas = splitNames(getF("キャラクターデザイン") || getF("キャラデザ"));
+  const defaultMusics = splitNames(getF("音楽"));
 
-    .action-panel {
-      margin-top: 8px;
-      padding-top: 12px;
-      border-top: 1px solid #eee;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    select.status-select {
-      padding: 8px 12px;
-      font-size: 0.95rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background: #fff;
-    }
-    .status-msg { font-weight: bold; font-size: 0.95rem; }
-    .loading-notice { font-size: 1rem; color: #555; padding: 20px 0; }
-  </style>
-</head>
-<body>
+  let titleRaw = clean(getF("タイトル")) || title.replace(/\s*\(.*?\)$/, "");
+  const titleParts = titleRaw.split(/\s*\/\s*/).map(t => t.trim()).filter(Boolean);
+  const hasSeason2 = wikitext.includes("放送期間2") || wikitext.includes("放送時間2") || titleParts.length > 1;
 
-  <h1>アニメ情報 Notion 登録 (Wikipedia照会ツール)</h1>
+  let baseDisplayTitle = titleRaw;
+  if (keyword && (title.includes("シリーズ") || titleParts.length === 0)) {
+    baseDisplayTitle = keyword;
+  }
 
-  <div class="search-box">
-    <input type="text" id="keyword" placeholder="作品名を入力（例: けいおん！、ぼっち・ざ・ろっく！）" onkeydown="if(event.key==='Enter') search();">
-    <button onclick="search()" id="searchBtn">検索</button>
-  </div>
+  const results = [];
+  const seasonCount = hasSeason2 ? Math.max(titleParts.length, 2) : 1;
 
-  <div id="results"></div>
+  for (let sIdx = 0; sIdx < seasonCount; sIdx++) {
+    const seasonNum = sIdx + 1;
+    let sTitle = titleParts[sIdx] || baseDisplayTitle;
 
-  <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbwUHgNqoOqw3vGTDbTVfiQUq6Ot_kZu6pc0IOAAQ0R6YDmmBCK7FxgYynrCspRWTxF6dw/exec";
-
-    let currentResults = [];
-    let cardStates = [];
-
-    async function search() {
-      const keyword = document.getElementById("keyword").value.trim();
-      if (!keyword) return;
-
-      const resultsDiv = document.getElementById("results");
-      const searchBtn = document.getElementById("searchBtn");
-      resultsDiv.innerHTML = "<p class='loading-notice'>🔍 Wikipediaから表情報を取得中...</p>";
-      searchBtn.disabled = true;
-
-      try {
-        const targetUrl = `${GAS_URL}?action=search&keyword=${encodeURIComponent(keyword)}`;
-        const response = await fetch(targetUrl);
-        const res = await response.json();
-
-        searchBtn.disabled = false;
-
-        if (res.status !== "success" || !res.data || res.data.length === 0) {
-          resultsDiv.innerHTML = "<p>Wikipedia上に該当記事が見つかりませんでした。</p>";
-          return;
-        }
-
-        currentResults = res.data;
-        renderLayout();
-      } catch (err) {
-        searchBtn.disabled = false;
-        resultsDiv.innerHTML = `<p style="color:red;">通信エラーが発生しました: ${err.message}</p>`;
-      }
-    }
-
-    function renderLayout() {
-      const resultsDiv = document.getElementById("results");
-      resultsDiv.innerHTML = "";
-
-      const firstItem = currentResults[0];
-
-      cardStates = currentResults.map(item => ({
-        seasons: [],
-        genres: [...(item.genres || [])],
-        selectedQuarter: ""
-      }));
-
-      let yearOptions = "";
-      for (let y = 2000; y <= 2050; y++) {
-        const isSelected = (y === 2009) ? "selected" : "";
-        yearOptions += `<option value="${y}" ${isSelected}>${y}年</option>`;
-      }
-
-      const joinStr = (arr) => (arr || []).join(", ");
-
-      const layout = document.createElement("div");
-      layout.className = "compare-layout";
-
-      // 左：紫色のインフォボックス表のみを埋め込み
-      const leftPanel = document.createElement("div");
-      leftPanel.className = "wiki-sticky-panel";
-      leftPanel.innerHTML = `
-        <div class="wiki-header">
-          <h3>Wikipedia 情報表</h3>
-          <a href="${firstItem.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">ブラウザで開く ↗</a>
-        </div>
-        <div class="wiki-table-container">
-          ${firstItem.tableHtml || "<p>表情報が見つかりませんでした。</p>"}
-        </div>
-      `;
-      layout.appendChild(leftPanel);
-
-      // 右：期別カードコンテナ
-      const rightColumn = document.createElement("div");
-      rightColumn.className = "forms-column";
-
-      currentResults.forEach((work, idx) => {
-        const card = document.createElement("div");
-        card.className = "season-card";
-
-        const isSeason1 = (work.seasonNum === 1 || !work.seasonNum);
-        const season1BtnHtml = isSeason1
-          ? `<button type="button" class="toggle-season1-btn" id="s1-btn-${idx}" onclick="toggleSeason1Title(${idx})">+ (第1期) を追加</button>`
-          : "";
-
-        card.innerHTML = `
-          <div class="card-title-header">${work.title}</div>
-
-          <div class="form-row">
-            <div class="form-label">作品名:</div>
-            <div class="title-input-box">
-              <input type="text" id="reg-title-${idx}" value="${work.title}">
-              ${season1BtnHtml}
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">放送クール:</div>
-            <div class="tag-container">
-              <div class="tag-list" id="season-tag-list-${idx}"></div>
-              
-              <div class="season-picker">
-                <select id="season-year-select-${idx}">
-                  ${yearOptions}
-                </select>
-                <div class="season-btn-group">
-                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '冬')">冬</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '春')">春</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '夏')">夏</button>
-                  <button type="button" class="season-btn" onclick="toggleQuarter(${idx}, this, '秋')">秋</button>
-                </div>
-                <button type="button" class="add-btn-small" onclick="addSeasonTag(${idx})">クール追加</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">ジャンル:</div>
-            <div class="tag-container">
-              <div class="tag-list" id="genre-tag-list-${idx}"></div>
-              <div class="genre-add-box">
-                <input type="text" id="new-genre-input-${idx}" placeholder="ジャンルを追加..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addGenreTag(${idx});}">
-                <button type="button" class="add-btn-small" onclick="addGenreTag(${idx})">追加</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">制作会社:</div>
-            <div><input type="text" id="reg-studios-${idx}" value="${joinStr(work.studios)}"></div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">原作者:</div>
-            <div><input type="text" id="reg-authors-${idx}" value="${joinStr(work.authors)}"></div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">監督:</div>
-            <div><input type="text" id="reg-directors-${idx}" value="${joinStr(work.directors)}"></div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">キャラデザ:</div>
-            <div><input type="text" id="reg-charaDesigns-${idx}" value="${joinStr(work.charaDesigns)}"></div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-label">音楽:</div>
-            <div><input type="text" id="reg-musics-${idx}" value="${joinStr(work.musics)}"></div>
-          </div>
-
-          <div class="action-panel">
-            <select id="reg-status-${idx}" class="status-select">
-              <option value="未視聴">未視聴</option>
-              <option value="視聴中">視聴中</option>
-              <option value="視聴済" selected>視聴済</option>
-              <option value="視聴完了">視聴完了</option>
-              <option value="中断">中断</option>
-            </select>
-            <button id="registerBtn-${idx}" onclick="executeRegister(${idx})">この内容でNotionに登録</button>
-            <span id="statusMsg-${idx}" class="status-msg"></span>
-          </div>
-        `;
-
-        rightColumn.appendChild(card);
-      });
-
-      layout.appendChild(rightColumn);
-      resultsDiv.appendChild(layout);
-
-      currentResults.forEach((_, idx) => {
-        renderSeasonTags(idx);
-        renderGenreTags(idx);
-      });
-    }
-
-    function toggleSeason1Title(idx) {
-      const input = document.getElementById(`reg-title-${idx}`);
-      const btn = document.getElementById(`s1-btn-${idx}`);
-      let val = input.value.trim();
-
-      if (val.includes("(第1期)")) {
-        val = val.replace(/\s*\(第1期\)/g, "").trim();
-        btn.textContent = "+ (第1期) を追加";
-        btn.classList.remove("active");
+    if (seasonNum >= 2) {
+      if (!sTitle.includes("期")) {
+        sTitle = `${sTitle} (第${seasonNum}期)`;
       } else {
-        val = `${val} (第1期)`;
-        btn.textContent = "- (第1期) を解除";
-        btn.classList.add("active");
+        sTitle = sTitle.replace(/（/g, " (").replace(/）/g, ")");
       }
-      input.value = val;
+    } else {
+      sTitle = sTitle.replace(/\s*[(（]第1期[)）]/g, "").trim();
+      sTitle = sTitle.replace(/（/g, " (").replace(/）/g, ")");
     }
 
-    function toggleQuarter(cardIdx, btn, qName) {
-      const state = cardStates[cardIdx];
-      const cardEl = btn.closest(".season-card");
-      if (state.selectedQuarter === qName) {
-        state.selectedQuarter = "";
-        btn.classList.remove("active");
-      } else {
-        state.selectedQuarter = qName;
-        cardEl.querySelectorAll(".season-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
+    const sStudios = splitNames(getF(`アニメーション制作${seasonNum}`) || getF(`制作${seasonNum}`)) || defaultStudios;
+    const sDirectors = splitNames(getF(`監督${seasonNum}`) || getF(`総監督${seasonNum}`)) || defaultDirectors;
+    const sCharas = splitNames(getF(`キャラクターデザイン${seasonNum}`) || getF(`キャラデザ${seasonNum}`)) || defaultCharas;
+    const sMusics = splitNames(getF(`音楽${seasonNum}`)) || defaultMusics;
+
+    results.push({
+      seasonNum: seasonNum,
+      title: sTitle.trim(),
+      wikiUrl: pageUrl,
+      mobileUrl: mobileUrl,
+      genres: genres,
+      studios: sStudios.length > 0 ? sStudios : defaultStudios,
+      authors: authors,
+      directors: sDirectors.length > 0 ? sDirectors : defaultDirectors,
+      charaDesigns: sCharas.length > 0 ? sCharas : defaultCharas,
+      musics: sMusics.length > 0 ? sMusics : defaultMusics
+    });
+  }
+
+  return results;
+}
+
+function findOrCreateRelation(dbId, name) {
+  if (!name || name.trim() === "") return null;
+  name = name.trim();
+
+  const searchUrl = `https://api.notion.com/v1/databases/${dbId}/query`;
+  const headers = {
+    "Authorization": `Bearer ${CONFIG.NOTION_API_KEY}`,
+    "Notion-Version": "2022-06-28",
+    "Content-Type": "application/json"
+  };
+
+  const searchRes = UrlFetchApp.fetch(searchUrl, {
+    method: "post",
+    headers: headers,
+    payload: JSON.stringify({
+      filter: { property: "名前", title: { equals: name } }
+    }),
+    muteHttpExceptions: true
+  });
+
+  const searchData = JSON.parse(searchRes.getContentText());
+  if (searchData.results && searchData.results.length > 0) {
+    return searchData.results[0].id;
+  }
+
+  const createUrl = "https://api.notion.com/v1/pages";
+  const createRes = UrlFetchApp.fetch(createUrl, {
+    method: "post",
+    headers: headers,
+    payload: JSON.stringify({
+      parent: { database_id: dbId },
+      properties: {
+        "名前": { title: [{ text: { content: name } }] }
       }
+    })
+  });
+
+  return JSON.parse(createRes.getContentText()).id;
+}
+
+function registerToNotion(work) {
+  const getRelationIds = (dbId, names) => {
+    return (names || [])
+      .map(n => findOrCreateRelation(dbId, n))
+      .filter(id => id !== null)
+      .map(id => ({ id: id }));
+  };
+
+  const properties = {
+    "作品名": {
+      title: [{ text: { content: work.title } }]
+    },
+    "制作会社": {
+      relation: getRelationIds(CONFIG.DB_IDS.STUDIO, work.studios)
+    },
+    "原作者": {
+      relation: getRelationIds(CONFIG.DB_IDS.AUTHOR, work.authors)
+    },
+    "監督": {
+      relation: getRelationIds(CONFIG.DB_IDS.DIRECTOR, work.directors)
+    },
+    "キャラデザ": {
+      relation: getRelationIds(CONFIG.DB_IDS.CHARA_DESIGN, work.charaDesigns)
+    },
+    "音楽": {
+      relation: getRelationIds(CONFIG.DB_IDS.MUSIC, work.musics)
+    },
+    "放送クール": {
+      multi_select: (work.seasons || []).map(s => ({ name: s }))
+    },
+    "ジャンル": {
+      multi_select: (work.genres || []).map(g => ({ name: g }))
     }
+  };
 
-    function addSeasonTag(cardIdx) {
-      const state = cardStates[cardIdx];
-      const year = document.getElementById(`season-year-select-${cardIdx}`).value;
-      const tag = state.selectedQuarter ? `${year} ${state.selectedQuarter}` : `${year}`;
+  if (work.status) {
+    properties["視聴状況"] = {
+      status: { name: work.status }
+    };
+  }
 
-      if (!state.seasons.includes(tag)) {
-        state.seasons.push(tag);
-        renderSeasonTags(cardIdx);
-      }
-    }
+  const payload = {
+    parent: { database_id: CONFIG.DB_IDS.MAIN },
+    properties: properties
+  };
 
-    function removeSeasonTag(cardIdx, tagIdx) {
-      cardStates[cardIdx].seasons.splice(tagIdx, 1);
-      renderSeasonTags(cardIdx);
-    }
+  const res = UrlFetchApp.fetch("https://api.notion.com/v1/pages", {
+    method: "post",
+    headers: {
+      "Authorization": `Bearer ${CONFIG.NOTION_API_KEY}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json"
+    },
+    payload: JSON.stringify(payload)
+  });
 
-    function renderSeasonTags(cardIdx) {
-      const list = document.getElementById(`season-tag-list-${cardIdx}`);
-      list.innerHTML = "";
-      cardStates[cardIdx].seasons.forEach((tag, tIdx) => {
-        const item = document.createElement("span");
-        item.className = "tag-item";
-        item.innerHTML = `${tag} <span class="tag-close" onclick="removeSeasonTag(${cardIdx}, ${tIdx})">&times;</span>`;
-        list.appendChild(item);
-      });
-    }
-
-    function addGenreTag(cardIdx) {
-      const state = cardStates[cardIdx];
-      const input = document.getElementById(`new-genre-input-${cardIdx}`);
-      const val = input.value.trim();
-      if (!val) return;
-      if (!state.genres.includes(val)) {
-        state.genres.push(val);
-        renderGenreTags(cardIdx);
-      }
-      input.value = "";
-    }
-
-    function removeGenreTag(cardIdx, tagIdx) {
-      cardStates[cardIdx].genres.splice(tagIdx, 1);
-      renderGenreTags(cardIdx);
-    }
-
-    function renderGenreTags(cardIdx) {
-      const list = document.getElementById(`genre-tag-list-${cardIdx}`);
-      list.innerHTML = "";
-      cardStates[cardIdx].genres.forEach((tag, tIdx) => {
-        const item = document.createElement("span");
-        item.className = "tag-item";
-        item.innerHTML = `${tag} <span class="tag-close" onclick="removeGenreTag(${cardIdx}, ${tIdx})">&times;</span>`;
-        list.appendChild(item);
-      });
-    }
-
-    async function executeRegister(cardIdx) {
-      const btn = document.getElementById(`registerBtn-${cardIdx}`);
-      const msg = document.getElementById(`statusMsg-${cardIdx}`);
-      const state = cardStates[cardIdx];
-
-      const splitCsv = (id) => document.getElementById(id).value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
-
-      const title = document.getElementById(`reg-title-${cardIdx}`).value.trim();
-      const studios = splitCsv(`reg-studios-${cardIdx}`);
-      const authors = splitCsv(`reg-authors-${cardIdx}`);
-      const directors = splitCsv(`reg-directors-${cardIdx}`);
-      const charaDesigns = splitCsv(`reg-charaDesigns-${cardIdx}`);
-      const musics = splitCsv(`reg-musics-${cardIdx}`);
-      const status = document.getElementById(`reg-status-${cardIdx}`).value;
-
-      btn.disabled = true;
-      msg.textContent = "Notionへ登録中...";
-      msg.style.color = "#0b6bcb";
-
-      try {
-        const payload = {
-          action: "register",
-          workData: {
-            title: title,
-            status: status,
-            seasons: state.seasons,
-            genres: state.genres,
-            studios: studios,
-            authors: authors,
-            directors: directors,
-            charaDesigns: charaDesigns,
-            musics: musics
-          }
-        };
-
-        const response = await fetch(GAS_URL, {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-
-        const res = await response.json();
-
-        if (res.status === "success") {
-          msg.textContent = "✔ Notionに登録完了しました！";
-          msg.style.color = "#0a7c42";
-        } else {
-          msg.textContent = `❌ エラー: ${res.message}`;
-          msg.style.color = "red";
-          btn.disabled = false;
-        }
-      } catch (err) {
-        msg.textContent = `❌ 通信エラー: ${err.message}`;
-        msg.style.color = "red";
-        btn.disabled = false;
-      }
-    }
-  </script>
-</body>
-</html>
+  return JSON.parse(res.getContentText()).id;
+}
