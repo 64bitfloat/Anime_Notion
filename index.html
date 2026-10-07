@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      max-width: 1300px;
+      max-width: 1350px;
       margin: 20px auto;
       padding: 0 20px;
       color: #333;
@@ -53,6 +53,7 @@
       .compare-layout { grid-template-columns: 1fr; }
     }
 
+    /* 左カラム：インフォボックス表専用パネル */
     .wiki-sticky-panel {
       position: sticky;
       top: 20px;
@@ -66,23 +67,45 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .wiki-header h3 { margin: 0; font-size: 1rem; }
     .wiki-link { font-size: 0.85rem; color: #0b6bcb; text-decoration: none; }
     .wiki-link:hover { text-decoration: underline; }
     
-    .wiki-iframe-wrapper {
-      height: 700px;
-      border: 1px solid #ddd;
+    .wiki-table-container {
+      max-height: 720px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
       border-radius: 6px;
-      overflow: hidden;
-      background-color: #fafafa;
+      padding: 10px;
+      background-color: #fff;
     }
-    .wiki-iframe-wrapper iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
+
+    /* Wikipediaの表デザイン再現 */
+    .wiki-table-container table {
+      width: 100% !important;
+      font-size: 0.82rem !important;
+      border-collapse: collapse !important;
+      border: 1px solid #a2a9b1 !important;
+      line-height: 1.4 !important;
+      margin-bottom: 12px !important;
+    }
+    .wiki-table-container th, .wiki-table-container td {
+      border: 1px solid #a2a9b1 !important;
+      padding: 4px 6px !important;
+    }
+    .wiki-table-container th {
+      background-color: #eaecf0 !important;
+      text-align: left !important;
+      width: 32% !important;
+    }
+    /* アニメヘッダーの紫色バー */
+    .wiki-table-container th[style*="background"], 
+    .wiki-table-container td[style*="background"] {
+      background-color: #ccf !important;
+      font-weight: bold !important;
+      text-align: center !important;
     }
 
     .forms-column {
@@ -126,7 +149,6 @@
       box-sizing: border-box;
     }
 
-    /* タイトル入力エリア用（入力欄＋第1期付与ボタン） */
     .title-input-box {
       display: flex;
       gap: 8px;
@@ -143,9 +165,7 @@
       white-space: nowrap;
       transition: all 0.2s;
     }
-    .toggle-season1-btn:hover {
-      background-color: #dceaf7;
-    }
+    .toggle-season1-btn:hover { background-color: #dceaf7; }
     .toggle-season1-btn.active {
       background-color: #0b6bcb;
       color: #fff;
@@ -251,7 +271,7 @@
 
       const resultsDiv = document.getElementById("results");
       const searchBtn = document.getElementById("searchBtn");
-      resultsDiv.innerHTML = "<p class='loading-notice'>🔍 Wikipediaから情報を照会中...</p>";
+      resultsDiv.innerHTML = "<p class='loading-notice'>🔍 Wikipediaから表情報を取得中...</p>";
       searchBtn.disabled = true;
 
       try {
@@ -283,8 +303,7 @@
       cardStates = currentResults.map(item => ({
         seasons: [],
         genres: [...(item.genres || [])],
-        selectedQuarter: "",
-        hasSeason1Tag: false
+        selectedQuarter: ""
       }));
 
       let yearOptions = "";
@@ -298,19 +317,21 @@
       const layout = document.createElement("div");
       layout.className = "compare-layout";
 
+      // 左：紫色のインフォボックス表のみを埋め込み
       const leftPanel = document.createElement("div");
       leftPanel.className = "wiki-sticky-panel";
       leftPanel.innerHTML = `
         <div class="wiki-header">
-          <h3>Wikipedia 参照</h3>
+          <h3>Wikipedia 情報表</h3>
           <a href="${firstItem.wikiUrl}" target="_blank" rel="noopener noreferrer" class="wiki-link">ブラウザで開く ↗</a>
         </div>
-        <div class="wiki-iframe-wrapper">
-          <iframe src="${firstItem.mobileUrl}" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+        <div class="wiki-table-container">
+          ${firstItem.tableHtml || "<p>表情報が見つかりませんでした。</p>"}
         </div>
       `;
       layout.appendChild(leftPanel);
 
+      // 右：期別カードコンテナ
       const rightColumn = document.createElement("div");
       rightColumn.className = "forms-column";
 
@@ -318,7 +339,6 @@
         const card = document.createElement("div");
         card.className = "season-card";
 
-        // 第1期の場合のみ「+ (第1期) を追加」ボタンを表示
         const isSeason1 = (work.seasonNum === 1 || !work.seasonNum);
         const season1BtnHtml = isSeason1
           ? `<button type="button" class="toggle-season1-btn" id="s1-btn-${idx}" onclick="toggleSeason1Title(${idx})">+ (第1期) を追加</button>`
@@ -416,7 +436,6 @@
       });
     }
 
-    // 「(第1期)」の付け外しトグル処理
     function toggleSeason1Title(idx) {
       const input = document.getElementById(`reg-title-${idx}`);
       const btn = document.getElementById(`s1-btn-${idx}`);
